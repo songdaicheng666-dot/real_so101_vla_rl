@@ -1,0 +1,17 @@
+# External projects and reference implementations
+/LIBERO/
+/RLinf/
+/SimpleVLA-RL/
+
+# Keep compatibility with alternate directory capitalization
+/RLInf/
+/SImpleVLA-RL/
+
+# Python build and test artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/

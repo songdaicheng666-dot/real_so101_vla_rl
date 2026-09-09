@@ -1,0 +1,2 @@
+"""Competition-aligned reward computation."""
+
