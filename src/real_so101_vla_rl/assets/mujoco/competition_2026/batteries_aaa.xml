@@ -1,0 +1,93 @@
+<mujocoinclude>
+  <!--
+    Shared AAA battery set for both Competition 2026 scenes.
+
+    Dimensions and mass follow the Energizer E92 AAA datasheet:
+    diameter 10.5 mm, total length 44.5 mm, typical mass 11.5 g.
+    Each body is rotated -90 degrees around local x so its cylinder axis
+    points along world +y when the including frame has no rotation.
+  -->
+  <body name="battery_red" pos="-0.214698 0.355914 0.00525"
+        quat="0.70710678 -0.70710678 0 0">
+    <freejoint name="battery_red_joint"/>
+    <geom name="battery_red_collision" type="cylinder" size="0.00525 0.02225"
+          mass="0.0115" condim="6" friction="0.8 0.005 0.0001"
+          solref="0.01 1" solimp="0.95 0.99 0.001" group="3"
+          rgba="0 0 0 0"/>
+    <geom name="battery_red_barrel" type="cylinder" size="0.00515 0.02085"
+          mass="0" contype="0" conaffinity="0" group="2"
+          rgba="0.780392 0.176471 0.113725 1"/>
+    <geom name="battery_red_negative_terminal" type="cylinder"
+          pos="0 0 -0.02155" size="0.0046 0.0007" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.72 0.74 0.78 1"/>
+    <geom name="battery_red_positive_cap" type="cylinder"
+          pos="0 0 0.0212" size="0.0046 0.00035" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.72 0.74 0.78 1"/>
+    <geom name="battery_red_positive_terminal" type="cylinder"
+          pos="0 0 0.0219" size="0.0019 0.00035" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.82 0.84 0.87 1"/>
+  </body>
+
+  <body name="battery_yellow" pos="-0.135543 0.355914 0.00525"
+        quat="0.70710678 -0.70710678 0 0">
+    <freejoint name="battery_yellow_joint"/>
+    <geom name="battery_yellow_collision" type="cylinder" size="0.00525 0.02225"
+          mass="0.0115" condim="6" friction="0.8 0.005 0.0001"
+          solref="0.01 1" solimp="0.95 0.99 0.001" group="3"
+          rgba="0 0 0 0"/>
+    <geom name="battery_yellow_barrel" type="cylinder" size="0.00515 0.02085"
+          mass="0" contype="0" conaffinity="0" group="2"
+          rgba="0.929412 0.807843 0.137255 1"/>
+    <geom name="battery_yellow_negative_terminal" type="cylinder"
+          pos="0 0 -0.02155" size="0.0046 0.0007" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.72 0.74 0.78 1"/>
+    <geom name="battery_yellow_positive_cap" type="cylinder"
+          pos="0 0 0.0212" size="0.0046 0.00035" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.72 0.74 0.78 1"/>
+    <geom name="battery_yellow_positive_terminal" type="cylinder"
+          pos="0 0 0.0219" size="0.0019 0.00035" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.82 0.84 0.87 1"/>
+  </body>
+
+  <body name="battery_blue" pos="-0.214698 0.268202 0.00525"
+        quat="0.70710678 -0.70710678 0 0">
+    <freejoint name="battery_blue_joint"/>
+    <geom name="battery_blue_collision" type="cylinder" size="0.00525 0.02225"
+          mass="0.0115" condim="6" friction="0.8 0.005 0.0001"
+          solref="0.01 1" solimp="0.95 0.99 0.001" group="3"
+          rgba="0 0 0 0"/>
+    <geom name="battery_blue_barrel" type="cylinder" size="0.00515 0.02085"
+          mass="0" contype="0" conaffinity="0" group="2"
+          rgba="0.243137 0.615686 0.847059 1"/>
+    <geom name="battery_blue_negative_terminal" type="cylinder"
+          pos="0 0 -0.02155" size="0.0046 0.0007" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.72 0.74 0.78 1"/>
+    <geom name="battery_blue_positive_cap" type="cylinder"
+          pos="0 0 0.0212" size="0.0046 0.00035" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.72 0.74 0.78 1"/>
+    <geom name="battery_blue_positive_terminal" type="cylinder"
+          pos="0 0 0.0219" size="0.0019 0.00035" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.82 0.84 0.87 1"/>
+  </body>
+
+  <body name="battery_green" pos="-0.135543 0.268202 0.00525"
+        quat="0.70710678 -0.70710678 0 0">
+    <freejoint name="battery_green_joint"/>
+    <geom name="battery_green_collision" type="cylinder" size="0.00525 0.02225"
+          mass="0.0115" condim="6" friction="0.8 0.005 0.0001"
+          solref="0.01 1" solimp="0.95 0.99 0.001" group="3"
+          rgba="0 0 0 0"/>
+    <geom name="battery_green_barrel" type="cylinder" size="0.00515 0.02085"
+          mass="0" contype="0" conaffinity="0" group="2"
+          rgba="0.427451 0.729412 0.266667 1"/>
+    <geom name="battery_green_negative_terminal" type="cylinder"
+          pos="0 0 -0.02155" size="0.0046 0.0007" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.72 0.74 0.78 1"/>
+    <geom name="battery_green_positive_cap" type="cylinder"
+          pos="0 0 0.0212" size="0.0046 0.00035" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.72 0.74 0.78 1"/>
+    <geom name="battery_green_positive_terminal" type="cylinder"
+          pos="0 0 0.0219" size="0.0019 0.00035" mass="0"
+          contype="0" conaffinity="0" group="2" rgba="0.82 0.84 0.87 1"/>
+  </body>
+</mujocoinclude>

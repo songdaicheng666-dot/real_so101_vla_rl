@@ -14,7 +14,7 @@ from real_so101_vla_rl.data.schema import (
     ACTION_KEY,
     ACTION_SOURCE,
     DEFAULT_FPS,
-    IMAGE_KEY,
+    RGB_IMAGE_KEYS,
     SCHEMA_VERSION,
     STATE_KEY,
     TASK_KEY,
@@ -53,6 +53,7 @@ class NormalizationConfig:
 class DatasetConfig:
     repo_id: str | None
     root: str | None
+    revision: str | None
     project_meta_dir: str
     fps: int
     image_keys: tuple[str, ...]
@@ -68,8 +69,10 @@ class DatasetConfig:
     def validate(self) -> None:
         if self.fps != DEFAULT_FPS:
             raise ValueError(f"The initial data contract requires fps={DEFAULT_FPS}")
-        if self.image_keys != (IMAGE_KEY,):
-            raise ValueError(f"The initial data contract requires image_keys=[{IMAGE_KEY!r}]")
+        if self.image_keys != RGB_IMAGE_KEYS:
+            raise ValueError(
+                f"The schema-v2 data contract requires image_keys={list(RGB_IMAGE_KEYS)!r}"
+            )
         if (self.state_key, self.action_key, self.task_key) != (STATE_KEY, ACTION_KEY, TASK_KEY):
             raise ValueError("Dataset feature keys do not match SO101DataSpec")
         if self.action_source != ACTION_SOURCE:
@@ -82,7 +85,11 @@ class DatasetConfig:
             raise ValueError("project_meta_dir must be 'project_meta'")
         if self.successful_episodes_only is not True:
             raise ValueError("SFT must filter to successful episodes")
-        for value, name in ((self.repo_id, "repo_id"), (self.root, "root")):
+        for value, name in (
+            (self.repo_id, "repo_id"),
+            (self.root, "root"),
+            (self.revision, "revision"),
+        ):
             if value is not None and (not isinstance(value, str) or not value.strip()):
                 raise ValueError(f"dataset.{name} must be null or a non-empty string")
         self.normalization.validate()
@@ -114,7 +121,7 @@ class ModelConfig:
             "action_chunk_size": ACTION_CHUNK_SIZE,
             "action_representation": "absolute_joint_target",
             "use_proprio": True,
-            "num_images": 1,
+            "num_images": len(RGB_IMAGE_KEYS),
             "image_size": 224,
         }
         for field_name, expected_value in expected.items():
@@ -190,8 +197,10 @@ class TrainingConfig:
             raise ValueError("training.logging_steps must be positive")
         if type(self.save_total_limit) is not int or self.save_total_limit <= 0:
             raise ValueError("training.save_total_limit must be positive")
-        if (self.bf16, self.gradient_checkpointing, self.image_augmentation) != (True, True, True):
-            raise ValueError("bf16, gradient_checkpointing, and image_augmentation must be enabled")
+        if (self.bf16, self.gradient_checkpointing) != (True, True):
+            raise ValueError("bf16 and gradient_checkpointing must be enabled")
+        if type(self.image_augmentation) is not bool:
+            raise TypeError("training.image_augmentation must be a boolean")
         if self.output_dir is not None and not self.output_dir.strip():
             raise ValueError("training.output_dir must be null or a non-empty string")
 
@@ -222,8 +231,8 @@ class SFTConfig:
 
         self.validate_definition()
         missing = []
-        if self.dataset.repo_id is None and self.dataset.root is None:
-            missing.append("dataset.repo_id or dataset.root")
+        if self.dataset.repo_id is None:
+            missing.append("dataset.repo_id")
         for field_name in (
             "max_steps",
             "per_device_train_batch_size",

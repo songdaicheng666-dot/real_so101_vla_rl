@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -63,7 +64,7 @@ def test_profile_uses_actual_lerobot_calibration_units(tmp_path) -> None:
     profile, calibration_bytes = build_robot_profile(
         calibration_path,
         robot_id="my_follower_arm",
-        camera_setup_id="front_camera_v1",
+        camera_setup_id="dual_rgbd_camera_v2",
         lerobot_commit="abc123",
     )
 
@@ -81,3 +82,6 @@ def test_profile_uses_actual_lerobot_calibration_units(tmp_path) -> None:
 
     assert (metadata_dir / "calibration.json").read_bytes() == calibration_bytes
     assert load_robot_profile(metadata_dir / "robot_profile.json") == profile
+
+    with pytest.raises(ValueError, match="schema_version=1"):
+        replace(profile, schema_version=1)

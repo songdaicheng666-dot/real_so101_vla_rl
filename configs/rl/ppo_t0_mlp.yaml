@@ -1,0 +1,59 @@
+environment:
+  name: basic_t0
+  action_chunk_size: 8
+  control_hz: 30
+  max_episode_chunks: 128
+  position_jitter_m: 0.005
+  yaw_jitter_deg: 10.0
+
+reward:
+  approach_scale: 10.0
+  grasp_bonus: 1.0
+  lift_scale: 20.0
+  lift_bonus: 2.0
+  transport_scale: 10.0
+  inside_bonus: 4.0
+  release_bonus: 2.0
+  success_bonus: 10.0
+  time_penalty: -0.001
+  failure_penalty: -10.0
+  lift_threshold_m: 0.010
+  stable_seconds: 3.0
+  max_linear_speed_m_s: 0.010
+  max_angular_speed_rad_s: 0.20
+
+policy:
+  kind: mlp_squashed_gaussian
+  hidden_sizes: [256, 256]
+  initial_log_std: -3.0
+
+collection:
+  num_envs: 16
+  steps_per_env_per_update: 32
+  group_size: 4
+
+algorithm:
+  name: ppo
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_coefficient: 0.20
+  value_clip_coefficient: 0.20
+  value_coefficient: 0.50
+  entropy_coefficient: 0.01
+  learning_rate: 0.0003
+  epochs: 4
+  minibatch_size: 128
+  max_gradient_norm: 0.50
+  kl_coefficient: 0.0
+
+training:
+  seed: 42
+  device: auto
+  total_updates: 1000
+  evaluation_interval: 50
+  evaluation_episodes: 16
+  checkpoint_interval: 50
+  output_root: runs/rl/hybrid
+  route: hybrid
+  source: sim
+  run_name: null

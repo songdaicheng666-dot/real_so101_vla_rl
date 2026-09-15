@@ -1,0 +1,55 @@
+<mujoco model="competition_2026_sequence_p1_p2_p3">
+  <include file="so101_competition.xml"/>
+
+  <!-- These scene-level settings intentionally override the included robot model. -->
+  <compiler angle="radian" coordinate="local" autolimits="true"
+            meshdir="../SO101_menagerie/assets"/>
+  <option gravity="0 0 -9.81" timestep="0.002" integrator="implicitfast"
+          cone="elliptic" iterations="10" ls_iterations="20" impratio="10"
+          noslip_iterations="3"/>
+  <statistic center="-0.042853 0.175 0.13" extent="0.60"/>
+
+  <visual>
+    <!-- Free camera opens in an oblique view; overview remains selectable. -->
+    <global azimuth="160" elevation="-30"/>
+    <headlight ambient="0.30 0.30 0.30" diffuse="0.15 0.15 0.15" specular="0 0 0"/>
+    <quality shadowsize="4096" offsamples="8"/>
+    <map znear="0.01" zfar="5"/>
+    <scale contactwidth="0.1" contactheight="0.05" forcewidth="0.02"
+           framelength="0.75" framewidth="0.025" camera="0.2"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.45 0.55 0.65"
+             rgb2="0.08 0.10 0.14" width="512" height="3072"/>
+    <texture name="board_texture" type="2d" file="textures/sequence_p1_p2_p3.png"/>
+    <material name="board_texture_material" texture="board_texture"
+              texuniform="false" texrepeat="1 1" reflectance="0" shininess="0" specular="0"/>
+    <material name="board_edge_material" rgba="0.72 0.72 0.72 1"
+              reflectance="0" shininess="0" specular="0"/>
+  </asset>
+
+  <worldbody>
+    <light name="key_light" pos="1 1 3.5" dir="-0.274 -0.219 -0.936"
+           directional="false" cutoff="25" exponent="1" diffuse="0.55 0.55 0.55"/>
+    <light name="fill_light" pos="0 0 3.5" dir="0 0 -1"
+           directional="true" diffuse="0.35 0.35 0.35" castshadow="false"/>
+    <camera name="overview" mode="fixed" pos="-0.042853 0.175 1.0"
+            xyaxes="1 0 0 0 1 0" fovy="35"/>
+
+    <!-- The box is the finite collision surface; its top is exactly z=0. -->
+    <geom name="board_collision" type="box" pos="-0.042853 0.175 -0.001"
+          size="0.350 0.275 0.001" material="board_edge_material"
+          contype="1" conaffinity="1" friction="0.8 0.02 0.001"/>
+
+    <!-- The plane only displays the clean task texture and never participates in contact. -->
+    <geom name="board_visual" type="plane" pos="-0.042853 0.175 0.0001"
+          size="0.350 0.275 0.001" material="board_texture_material"
+          contype="0" conaffinity="0" group="1"/>
+
+    <!-- This page's four placeholders are 37.866 mm left of the canonical layout. -->
+    <frame pos="-0.037866 0 0">
+      <include file="batteries_aaa.xml"/>
+    </frame>
+  </worldbody>
+</mujoco>

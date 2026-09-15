@@ -1,0 +1,198 @@
+[09/14 16:15:31.332163][info][965947][HostTimestampProvider.cpp:36] Update clock type to: realtime(0)
+[09/14 16:15:31.446045][info][965947][LinuxUsbPal.cpp:334] Create PollingDeviceWatcher!
+[09/14 16:15:31.446054][info][965947][DeviceManager.cpp:25] Current found device(s): (1)
+[09/14 16:15:31.446055][info][965947][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:15:31.446056][info][965947][DeviceManager.cpp:463] Enable net device enumeration: true
+[09/14 16:15:32.451350][info][965947][DeviceManager.cpp:25] Current device(s) list: (1)
+[09/14 16:15:32.451363][info][965947][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:15:32.451450][warning][965947][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=108
+[09/14 16:15:32.451475][warning][965947][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=4035
+[09/14 16:15:32.451484][warning][965947][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=5003
+[09/14 16:15:32.459980][info][965947][DeviceManager.cpp:200] Device created successfully! Name: Gemini 2, PID: 0x0670, SN/ID: AY6M8630105 FW: 1.4.92
+[09/14 16:15:32.460075][info][965947][Pipeline.cpp:54] [AY6M8630105] Pipeline created with device: {name: Gemini 2, sn: AY6M8630105}, @0x5C36AE0C40B0
+[09/14 16:15:32.465221][warning][965947][SensorBase.cpp:153] [AY6M8630105] Failed to update default stream profile for sensor due to no matching stream profile found
+[09/14 16:15:32.471880][warning][965947][ObException.cpp:26] A recoverable_exception has occurred!
+ - where: DeviceBase.cpp(393)
+ - msg: Device Component 'preset manager' not found!
+ - type: NOT_FOUND
+ - status: 114
+[09/14 16:15:32.474884][info][965947][Pipeline.cpp:65] [AY6M8630105] Pipeline destroyed! @0x5C36AE0C40B0
+[09/14 16:15:32.474941][info][965947][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:15:32.480399][info][965947][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:15:32.480404][info][965947][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[09/14 16:15:32.480447][info][965947][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:15:32.483129][info][965947][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:15:32.483139][info][965947][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[09/14 16:17:29.546840][info][972700][HostTimestampProvider.cpp:36] Update clock type to: realtime(0)
+[09/14 16:17:29.658713][info][972700][LinuxUsbPal.cpp:334] Create PollingDeviceWatcher!
+[09/14 16:17:29.658729][info][972700][DeviceManager.cpp:25] Current found device(s): (1)
+[09/14 16:17:29.658732][info][972700][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:17:29.658736][info][972700][DeviceManager.cpp:463] Enable net device enumeration: true
+[09/14 16:17:30.662680][info][972700][DeviceManager.cpp:25] Current device(s) list: (1)
+[09/14 16:17:30.662695][info][972700][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:17:30.662839][warning][972700][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=108
+[09/14 16:17:30.662902][warning][972700][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=4035
+[09/14 16:17:30.662928][warning][972700][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=5003
+[09/14 16:17:30.671985][info][972700][DeviceManager.cpp:200] Device created successfully! Name: Gemini 2, PID: 0x0670, SN/ID: AY6M8630105 FW: 1.4.92
+[09/14 16:17:30.672077][info][972700][Pipeline.cpp:54] [AY6M8630105] Pipeline created with device: {name: Gemini 2, sn: AY6M8630105}, @0x574DC948B3B0
+[09/14 16:17:30.678574][warning][972700][SensorBase.cpp:153] [AY6M8630105] Failed to update default stream profile for sensor due to no matching stream profile found
+[09/14 16:17:30.687971][info][972700][Pipeline.cpp:228] [AY6M8630105] Check and set config done!
+[09/14 16:17:30.688280][info][972700][Pipeline.cpp:266] [AY6M8630105] Try to start streams!
+[09/14 16:17:30.688288][info][972700][VideoSensor.cpp:61] [AY6M8630105] Try to start stream: {type: Depth, format: Y16, width: 640, height: 400, fps: 30}
+[09/14 16:17:30.688296][info][972700][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPED to STARTING@Depth
+[09/14 16:17:30.688300][info][972700][VideoSensor.cpp:130] [AY6M8630105] Start backend stream: {type: Depth, format: Y16, width: 640, height: 400, fps: 30}
+[09/14 16:17:30.691268][warning][972869][VideoSensor.cpp:226] [AY6M8630105] This frame will be dropped because the data size does not match the expectation! size=37212, expected=512000 @Depth
+[09/14 16:17:30.692310][info][972700][VideoSensor.cpp:61] [AY6M8630105] Try to start stream: {type: Color, format: MJPG, width: 640, height: 480, fps: 30}
+[09/14 16:17:30.692342][info][972700][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPED to STARTING@Color
+[09/14 16:17:30.692347][info][972700][VideoSensor.cpp:130] [AY6M8630105] Start backend stream: {type: Color, format: MJPG, width: 640, height: 480, fps: 30}
+[09/14 16:17:30.701834][info][972700][Pipeline.cpp:293] [AY6M8630105] Start streams done!
+[09/14 16:17:30.701842][info][972700][Pipeline.cpp:250] [AY6M8630105] Pipeline start done!
+[09/14 16:17:30.793428][info][972869][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STARTING to STREAMING@Depth
+[09/14 16:17:30.838589][info][972871][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STARTING to STREAMING@Color
+[09/14 16:17:31.835662][info][972700][Pipeline.cpp:367] [AY6M8630105] Try to stop pipeline!
+[09/14 16:17:31.835678][info][972700][Pipeline.cpp:343] [AY6M8630105] Try to stop streams!
+[09/14 16:17:31.835726][info][972700][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STREAMING to STOPPING@Color
+[09/14 16:17:31.847162][info][972700][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPING to STOPPED@Color
+[09/14 16:17:31.847390][info][972700][Pipeline.cpp:357] [AY6M8630105] Sensor stream stopped, sensorType=Color
+[09/14 16:17:31.847403][info][972700][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STREAMING to STOPPING@Depth
+[09/14 16:17:31.862880][info][972700][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPING to STOPPED@Depth
+[09/14 16:17:31.863063][info][972700][Pipeline.cpp:357] [AY6M8630105] Sensor stream stopped, sensorType=Depth
+[09/14 16:17:31.863066][info][972700][Pipeline.cpp:363] [AY6M8630105] Stop streams done!
+[09/14 16:17:31.863353][info][972700][Pipeline.cpp:393] [AY6M8630105] Stop pipeline done!
+[09/14 16:17:31.871145][info][972700][Pipeline.cpp:65] [AY6M8630105] Pipeline destroyed! @0x574DC948B3B0
+[09/14 16:17:31.871240][info][972700][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:17:31.871855][info][972700][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:17:31.871857][info][972700][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[09/14 16:17:31.871892][info][972700][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:17:31.872475][info][972700][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:17:31.872481][info][972700][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[09/14 16:18:09.594097][info][976122][HostTimestampProvider.cpp:36] Update clock type to: realtime(0)
+[09/14 16:18:09.708012][info][976122][LinuxUsbPal.cpp:334] Create PollingDeviceWatcher!
+[09/14 16:18:09.708034][info][976122][DeviceManager.cpp:25] Current found device(s): (1)
+[09/14 16:18:09.708038][info][976122][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:18:09.708043][info][976122][DeviceManager.cpp:463] Enable net device enumeration: true
+[09/14 16:18:10.712028][info][976122][DeviceManager.cpp:25] Current device(s) list: (1)
+[09/14 16:18:10.712047][info][976122][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:18:10.712201][warning][976122][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=108
+[09/14 16:18:10.712265][warning][976122][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=4035
+[09/14 16:18:10.712296][warning][976122][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=5003
+[09/14 16:18:10.720764][info][976122][DeviceManager.cpp:200] Device created successfully! Name: Gemini 2, PID: 0x0670, SN/ID: AY6M8630105 FW: 1.4.92
+[09/14 16:18:10.720873][info][976122][Pipeline.cpp:54] [AY6M8630105] Pipeline created with device: {name: Gemini 2, sn: AY6M8630105}, @0x588DACE28160
+[09/14 16:18:10.728799][warning][976122][SensorBase.cpp:153] [AY6M8630105] Failed to update default stream profile for sensor due to no matching stream profile found
+[09/14 16:18:10.739270][info][976122][Pipeline.cpp:228] [AY6M8630105] Check and set config done!
+[09/14 16:18:10.739658][info][976122][Pipeline.cpp:266] [AY6M8630105] Try to start streams!
+[09/14 16:18:10.739682][info][976122][VideoSensor.cpp:61] [AY6M8630105] Try to start stream: {type: Depth, format: Y16, width: 640, height: 400, fps: 30}
+[09/14 16:18:10.739693][info][976122][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPED to STARTING@Depth
+[09/14 16:18:10.739700][info][976122][VideoSensor.cpp:130] [AY6M8630105] Start backend stream: {type: Depth, format: Y16, width: 640, height: 400, fps: 30}
+[09/14 16:18:10.742909][warning][976285][VideoSensor.cpp:226] [AY6M8630105] This frame will be dropped because the data size does not match the expectation! size=16164, expected=512000 @Depth
+[09/14 16:18:10.744003][info][976122][VideoSensor.cpp:61] [AY6M8630105] Try to start stream: {type: Color, format: MJPG, width: 640, height: 480, fps: 30}
+[09/14 16:18:10.744011][info][976122][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPED to STARTING@Color
+[09/14 16:18:10.744018][info][976122][VideoSensor.cpp:130] [AY6M8630105] Start backend stream: {type: Color, format: MJPG, width: 640, height: 480, fps: 30}
+[09/14 16:18:10.751222][warning][976289][VideoSensor.cpp:214] [AY6M8630105] This frame will be dropped because jpg format verification failure! @Color
+[09/14 16:18:10.753257][info][976122][Pipeline.cpp:293] [AY6M8630105] Start streams done!
+[09/14 16:18:10.753262][info][976122][Pipeline.cpp:250] [AY6M8630105] Pipeline start done!
+[09/14 16:18:10.840701][info][976285][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STARTING to STREAMING@Depth
+[09/14 16:18:10.890933][info][976289][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STARTING to STREAMING@Color
+[09/14 16:18:11.887868][info][976122][Pipeline.cpp:367] [AY6M8630105] Try to stop pipeline!
+[09/14 16:18:11.887886][info][976122][Pipeline.cpp:343] [AY6M8630105] Try to stop streams!
+[09/14 16:18:11.887906][info][976122][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STREAMING to STOPPING@Color
+[09/14 16:18:11.899933][info][976122][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPING to STOPPED@Color
+[09/14 16:18:11.900134][info][976122][Pipeline.cpp:357] [AY6M8630105] Sensor stream stopped, sensorType=Color
+[09/14 16:18:11.900147][info][976122][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STREAMING to STOPPING@Depth
+[09/14 16:18:11.912462][info][976122][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPING to STOPPED@Depth
+[09/14 16:18:11.912661][info][976122][Pipeline.cpp:357] [AY6M8630105] Sensor stream stopped, sensorType=Depth
+[09/14 16:18:11.912670][info][976122][Pipeline.cpp:363] [AY6M8630105] Stop streams done!
+[09/14 16:18:11.913015][info][976122][Pipeline.cpp:393] [AY6M8630105] Stop pipeline done!
+[09/14 16:18:11.913079][info][976122][Pipeline.cpp:65] [AY6M8630105] Pipeline destroyed! @0x588DACE28160
+[09/14 16:18:11.913184][info][976122][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:18:11.913850][info][976122][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:18:11.913855][info][976122][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[09/14 16:18:11.913905][info][976122][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:18:11.914603][info][976122][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:18:11.914604][info][976122][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[09/14 16:18:11.916130][warning][976300][VideoSensor.cpp:214] [AY6M8630105] This frame will be dropped because jpg format verification failure! @Color [**1 logs in 1164ms, last: 16:18:10.889170**]
+[09/14 16:18:11.916299][warning][976288][VideoSensor.cpp:226] [AY6M8630105] This frame will be dropped because the data size does not match the expectation! size=16208, expected=512000 @Depth [**2 logs in 1173ms, last: 16:18:10.743716**]
+[09/14 16:19:01.220450][info][980477][HostTimestampProvider.cpp:36] Update clock type to: realtime(0)
+[09/14 16:19:01.333551][info][980477][LinuxUsbPal.cpp:334] Create PollingDeviceWatcher!
+[09/14 16:19:01.333573][info][980477][DeviceManager.cpp:25] Current found device(s): (1)
+[09/14 16:19:01.333576][info][980477][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:19:01.333580][info][980477][DeviceManager.cpp:463] Enable net device enumeration: true
+[09/14 16:19:02.341229][info][980477][DeviceManager.cpp:25] Current device(s) list: (1)
+[09/14 16:19:02.341249][info][980477][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:19:02.341416][warning][980477][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=108
+[09/14 16:19:02.341463][warning][980477][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=4035
+[09/14 16:19:02.341496][warning][980477][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=5003
+[09/14 16:19:02.350219][info][980477][DeviceManager.cpp:200] Device created successfully! Name: Gemini 2, PID: 0x0670, SN/ID: AY6M8630105 FW: 1.4.92
+[09/14 16:19:02.350328][info][980477][Pipeline.cpp:54] [AY6M8630105] Pipeline created with device: {name: Gemini 2, sn: AY6M8630105}, @0x5993E2753150
+[09/14 16:19:02.356762][warning][980477][SensorBase.cpp:153] [AY6M8630105] Failed to update default stream profile for sensor due to no matching stream profile found
+[09/14 16:19:02.366188][info][980477][Pipeline.cpp:228] [AY6M8630105] Check and set config done!
+[09/14 16:19:02.366477][info][980477][Pipeline.cpp:266] [AY6M8630105] Try to start streams!
+[09/14 16:19:02.366489][info][980477][VideoSensor.cpp:61] [AY6M8630105] Try to start stream: {type: Depth, format: Y16, width: 640, height: 400, fps: 30}
+[09/14 16:19:02.366500][info][980477][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPED to STARTING@Depth
+[09/14 16:19:02.366505][info][980477][VideoSensor.cpp:130] [AY6M8630105] Start backend stream: {type: Depth, format: Y16, width: 640, height: 400, fps: 30}
+[09/14 16:19:02.374363][info][980477][VideoSensor.cpp:61] [AY6M8630105] Try to start stream: {type: Color, format: MJPG, width: 640, height: 480, fps: 30}
+[09/14 16:19:02.374377][info][980477][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPED to STARTING@Color
+[09/14 16:19:02.374382][info][980477][VideoSensor.cpp:130] [AY6M8630105] Start backend stream: {type: Color, format: MJPG, width: 640, height: 480, fps: 30}
+[09/14 16:19:02.384313][info][980477][Pipeline.cpp:293] [AY6M8630105] Start streams done!
+[09/14 16:19:02.384320][info][980477][Pipeline.cpp:250] [AY6M8630105] Pipeline start done!
+[09/14 16:19:02.477937][info][980640][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STARTING to STREAMING@Depth
+[09/14 16:19:02.528393][info][980642][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STARTING to STREAMING@Color
+[09/14 16:19:03.524009][info][980477][Pipeline.cpp:367] [AY6M8630105] Try to stop pipeline!
+[09/14 16:19:03.524024][info][980477][Pipeline.cpp:343] [AY6M8630105] Try to stop streams!
+[09/14 16:19:03.524043][info][980477][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STREAMING to STOPPING@Color
+[09/14 16:19:03.535897][info][980477][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPING to STOPPED@Color
+[09/14 16:19:03.536095][info][980477][Pipeline.cpp:357] [AY6M8630105] Sensor stream stopped, sensorType=Color
+[09/14 16:19:03.536111][info][980477][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STREAMING to STOPPING@Depth
+[09/14 16:19:03.549240][info][980477][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPING to STOPPED@Depth
+[09/14 16:19:03.549431][info][980477][Pipeline.cpp:357] [AY6M8630105] Sensor stream stopped, sensorType=Depth
+[09/14 16:19:03.549433][info][980477][Pipeline.cpp:363] [AY6M8630105] Stop streams done!
+[09/14 16:19:03.549732][info][980477][Pipeline.cpp:393] [AY6M8630105] Stop pipeline done!
+[09/14 16:19:03.549775][info][980477][Pipeline.cpp:65] [AY6M8630105] Pipeline destroyed! @0x5993E2753150
+[09/14 16:19:03.549843][info][980477][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:19:03.550465][info][980477][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:19:03.550470][info][980477][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[09/14 16:19:03.550516][info][980477][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:19:03.551209][info][980477][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:19:03.551213][info][980477][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[09/14 16:24:24.569698][info][1008664][HostTimestampProvider.cpp:36] Update clock type to: realtime(0)
+[09/14 16:24:24.682374][info][1008664][LinuxUsbPal.cpp:334] Create PollingDeviceWatcher!
+[09/14 16:24:24.682404][info][1008664][DeviceManager.cpp:25] Current found device(s): (1)
+[09/14 16:24:24.682408][info][1008664][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:24:24.682413][info][1008664][DeviceManager.cpp:463] Enable net device enumeration: true
+[09/14 16:24:25.686415][info][1008664][DeviceManager.cpp:25] Current device(s) list: (1)
+[09/14 16:24:25.686434][info][1008664][DeviceManager.cpp:34] 	- Name: Gemini2, PID: 0x0670, SN/ID: AY6M8630105, Connection: USB2.0
+[09/14 16:24:25.686554][warning][1008664][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=108
+[09/14 16:24:25.686601][warning][1008664][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=4035
+[09/14 16:24:25.686649][warning][1008664][PropertyServer.cpp:120] [AY6M8630105] Not added to property map, property not found in OBPropertyBaseInfoMap, id=5003
+[09/14 16:24:25.695015][info][1008664][DeviceManager.cpp:200] Device created successfully! Name: Gemini 2, PID: 0x0670, SN/ID: AY6M8630105 FW: 1.4.92
+[09/14 16:24:25.695048][info][1008664][Pipeline.cpp:54] [AY6M8630105] Pipeline created with device: {name: Gemini 2, sn: AY6M8630105}, @0x5F1E8BCD0420
+[09/14 16:24:25.701647][warning][1008664][SensorBase.cpp:153] [AY6M8630105] Failed to update default stream profile for sensor due to no matching stream profile found
+[09/14 16:24:25.710907][info][1008664][Pipeline.cpp:228] [AY6M8630105] Check and set config done!
+[09/14 16:24:25.711380][info][1008664][Pipeline.cpp:266] [AY6M8630105] Try to start streams!
+[09/14 16:24:25.711397][info][1008664][VideoSensor.cpp:61] [AY6M8630105] Try to start stream: {type: Depth, format: Y16, width: 640, height: 400, fps: 30}
+[09/14 16:24:25.711407][info][1008664][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPED to STARTING@Depth
+[09/14 16:24:25.711411][info][1008664][VideoSensor.cpp:130] [AY6M8630105] Start backend stream: {type: Depth, format: Y16, width: 640, height: 400, fps: 30}
+[09/14 16:24:25.715555][info][1008664][VideoSensor.cpp:61] [AY6M8630105] Try to start stream: {type: Color, format: MJPG, width: 640, height: 480, fps: 30}
+[09/14 16:24:25.715561][info][1008664][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPED to STARTING@Color
+[09/14 16:24:25.715564][info][1008664][VideoSensor.cpp:130] [AY6M8630105] Start backend stream: {type: Color, format: MJPG, width: 640, height: 480, fps: 30}
+[09/14 16:24:25.724725][info][1008664][Pipeline.cpp:293] [AY6M8630105] Start streams done!
+[09/14 16:24:25.724729][info][1008664][Pipeline.cpp:250] [AY6M8630105] Pipeline start done!
+[09/14 16:24:25.797312][info][1008827][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STARTING to STREAMING@Depth
+[09/14 16:24:25.881388][info][1008829][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STARTING to STREAMING@Color
+[09/14 16:24:26.999832][info][1008664][Pipeline.cpp:367] [AY6M8630105] Try to stop pipeline!
+[09/14 16:24:26.999850][info][1008664][Pipeline.cpp:343] [AY6M8630105] Try to stop streams!
+[09/14 16:24:26.999872][info][1008664][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STREAMING to STOPPING@Color
+[09/14 16:24:27.018781][info][1008664][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPING to STOPPED@Color
+[09/14 16:24:27.018879][info][1008664][Pipeline.cpp:357] [AY6M8630105] Sensor stream stopped, sensorType=Color
+[09/14 16:24:27.018891][info][1008664][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STREAMING to STOPPING@Depth
+[09/14 16:24:27.032108][info][1008664][SensorBase.cpp:216] [AY6M8630105] Stream state changed from STOPPING to STOPPED@Depth
+[09/14 16:24:27.032269][info][1008664][Pipeline.cpp:357] [AY6M8630105] Sensor stream stopped, sensorType=Depth
+[09/14 16:24:27.032272][info][1008664][Pipeline.cpp:363] [AY6M8630105] Stop streams done!
+[09/14 16:24:27.032551][info][1008664][Pipeline.cpp:393] [AY6M8630105] Stop pipeline done!
+[09/14 16:24:27.032594][info][1008664][Pipeline.cpp:65] [AY6M8630105] Pipeline destroyed! @0x5F1E8BCD0420
+[09/14 16:24:27.032682][info][1008664][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:24:27.033266][info][1008664][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:24:27.033269][info][1008664][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done
+[09/14 16:24:27.033313][info][1008664][SensorBase.cpp:53] [AY6M8630105] SensorBase is destroyed
+[09/14 16:24:27.033943][info][1008664][ObLibuvcDevicePort.cpp:87] uvc_close done.
+[09/14 16:24:27.033946][info][1008664][ObLibuvcDevicePort.cpp:88] ~ObLibuvcDevicePort done

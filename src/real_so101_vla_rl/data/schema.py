@@ -10,15 +10,50 @@ from enum import StrEnum
 from numbers import Real
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 ACTION_DIM = 6
 ACTION_CHUNK_SIZE = 8
 DEFAULT_FPS = 30
-IMAGE_KEY = "observation.images.front"
+IMAGE_HEIGHT = 480
+IMAGE_WIDTH = 640
+OVERVIEW_IMAGE_KEY = "observation.images.overview"
+WRIST_IMAGE_KEY = "observation.images.wrist"
+OVERVIEW_DEPTH_KEY = "observation.images.overview_depth"
 STATE_KEY = "observation.state"
 ACTION_KEY = "action"
 TASK_KEY = "task"
 ACTION_SOURCE = "robot_send_action_return"
+
+RGB_IMAGE_KEYS = (OVERVIEW_IMAGE_KEY, WRIST_IMAGE_KEY)
+DEPTH_IMAGE_KEYS = (OVERVIEW_DEPTH_KEY,)
+SENSOR_TIMESTAMP_KEYS = (
+    "observation.timestamps.overview_ns",
+    "observation.timestamps.wrist_ns",
+    "observation.timestamps.overview_depth_ns",
+    "observation.timestamps.state_ns",
+)
+SENSOR_VALID_KEYS = (
+    "observation.valid.overview",
+    "observation.valid.wrist",
+    "observation.valid.overview_depth",
+    "observation.valid.state",
+)
+MODEL_INPUT_KEYS = (*RGB_IMAGE_KEYS, STATE_KEY, TASK_KEY)
+TRAINING_TARGET_KEYS = (ACTION_KEY,)
+AUXILIARY_OBSERVATION_KEYS = (
+    *DEPTH_IMAGE_KEYS,
+    *SENSOR_TIMESTAMP_KEYS,
+    *SENSOR_VALID_KEYS,
+)
+RECORDING_FRAME_KEYS = (
+    *RGB_IMAGE_KEYS,
+    *DEPTH_IMAGE_KEYS,
+    STATE_KEY,
+    ACTION_KEY,
+    TASK_KEY,
+    *SENSOR_TIMESTAMP_KEYS,
+    *SENSOR_VALID_KEYS,
+)
 
 JOINT_NAMES = (
     "shoulder_pan.pos",
@@ -114,10 +149,17 @@ class AtomicTask:
 
 @dataclass(frozen=True, slots=True)
 class SO101DataSpec:
-    """Model-facing field names and dimensions for the first SO-101 dataset."""
+    """Canonical recording and model-facing fields for SO-101 schema v2."""
 
     schema_version: int = SCHEMA_VERSION
-    image_key: str = IMAGE_KEY
+    rgb_image_keys: tuple[str, ...] = RGB_IMAGE_KEYS
+    depth_image_keys: tuple[str, ...] = DEPTH_IMAGE_KEYS
+    sensor_timestamp_keys: tuple[str, ...] = SENSOR_TIMESTAMP_KEYS
+    sensor_valid_keys: tuple[str, ...] = SENSOR_VALID_KEYS
+    recording_frame_keys: tuple[str, ...] = RECORDING_FRAME_KEYS
+    model_input_keys: tuple[str, ...] = MODEL_INPUT_KEYS
+    training_target_keys: tuple[str, ...] = TRAINING_TARGET_KEYS
+    auxiliary_observation_keys: tuple[str, ...] = AUXILIARY_OBSERVATION_KEYS
     state_key: str = STATE_KEY
     action_key: str = ACTION_KEY
     task_key: str = TASK_KEY
@@ -166,34 +208,94 @@ def validate_joint_vector(values: Any, *, field_name: str) -> tuple[float, ...]:
     return tuple(normalized)
 
 
+def _validate_array(
+    value: Any,
+    *,
+    field_name: str,
+    shape: tuple[int, ...],
+    dtype: str,
+) -> None:
+    actual_shape = getattr(value, "shape", None)
+    if actual_shape is None or tuple(actual_shape) != shape:
+        raise ValueError(f"{field_name} must have shape {shape}, got {actual_shape}")
+    actual_dtype = getattr(value, "dtype", None)
+    if actual_dtype is None or str(actual_dtype) != dtype:
+        raise TypeError(f"{field_name} must use {dtype}, got {actual_dtype}")
+
+
 def validate_frame(frame: Mapping[str, Any]) -> None:
-    """Validate the four fields supplied by the project recording loop.
+    """Validate one caller-supplied schema-v2 recording frame.
 
     LeRobot's timestamp and integer index fields are intentionally absent: its
     writer creates them while saving an episode.
     """
 
-    expected = {IMAGE_KEY, STATE_KEY, ACTION_KEY, TASK_KEY}
+    expected = set(RECORDING_FRAME_KEYS)
     actual = set(frame)
     if actual != expected:
         missing = sorted(expected - actual)
         extra = sorted(actual - expected)
         raise ValueError(f"Frame fields do not match the SO-101 schema; missing={missing}, extra={extra}")
 
-    image = frame[IMAGE_KEY]
-    image_shape = getattr(image, "shape", None)
-    if image_shape is None or len(image_shape) != 3 or image_shape[-1] != 3:
-        raise ValueError(f"{IMAGE_KEY} must be an HxWx3 RGB array, got shape={image_shape}")
-    if image_shape[0] <= 0 or image_shape[1] <= 0:
-        raise ValueError(f"{IMAGE_KEY} must have positive height and width")
-    image_dtype = getattr(image, "dtype", None)
-    if image_dtype is not None and str(image_dtype) != "uint8":
-        raise TypeError(f"{IMAGE_KEY} must use uint8 pixels, got {image_dtype}")
+    for key in RGB_IMAGE_KEYS:
+        _validate_array(
+            frame[key],
+            field_name=key,
+            shape=(IMAGE_HEIGHT, IMAGE_WIDTH, 3),
+            dtype="uint8",
+        )
+    _validate_array(
+        frame[OVERVIEW_DEPTH_KEY],
+        field_name=OVERVIEW_DEPTH_KEY,
+        shape=(IMAGE_HEIGHT, IMAGE_WIDTH, 1),
+        dtype="uint16",
+    )
 
-    validate_joint_vector(frame[STATE_KEY], field_name=STATE_KEY)
-    validate_joint_vector(frame[ACTION_KEY], field_name=ACTION_KEY)
+    for key in (STATE_KEY, ACTION_KEY):
+        _validate_array(
+            frame[key],
+            field_name=key,
+            shape=(ACTION_DIM,),
+            dtype="float32",
+        )
+        validate_joint_vector(frame[key], field_name=key)
+
+    for key in SENSOR_TIMESTAMP_KEYS:
+        value = frame[key]
+        _validate_array(value, field_name=key, shape=(1,), dtype="int64")
+        if int(value[0]) < 0:
+            raise ValueError(f"{key} must be a non-negative host monotonic timestamp")
+
+    for key in SENSOR_VALID_KEYS:
+        value = frame[key]
+        _validate_array(value, field_name=key, shape=(1,), dtype="bool")
+        if not bool(value[0]):
+            raise ValueError(f"{key} must be true before a frame can be persisted")
 
     task = frame[TASK_KEY]
     if not isinstance(task, str):
         raise TypeError(f"{TASK_KEY} must be a string")
     AtomicTask.from_instruction(task)
+
+
+def validate_frame_sequence(frames: Sequence[Mapping[str, Any]]) -> None:
+    """Validate frames and require non-decreasing per-sensor host timestamps."""
+
+    previous: dict[str, int] = {}
+    for frame_index, frame in enumerate(frames):
+        validate_frame(frame)
+        for key in SENSOR_TIMESTAMP_KEYS:
+            timestamp = int(frame[key][0])
+            if key in previous and timestamp < previous[key]:
+                raise ValueError(
+                    f"{key} regressed at frame {frame_index}: "
+                    f"previous={previous[key]}, current={timestamp}"
+                )
+            previous[key] = timestamp
+
+
+def project_model_inputs(frame: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate a recording frame and return only the ordered policy inputs."""
+
+    validate_frame(frame)
+    return {key: frame[key] for key in MODEL_INPUT_KEYS}

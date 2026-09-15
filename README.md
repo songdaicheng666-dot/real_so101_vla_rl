@@ -2,6 +2,51 @@
 
 ## 总览
 
+本项目使用 SO-101 实体机械臂完成多色电池识别、抓取和顺序放置任务。当前已经完成项目结构、schema v2 双 RGB/对齐深度数据契约、LeRobotDataset → OpenVLA-OFT 适配器、云端真实模型联调、模拟数据 200-step SFT 全链路验证，以及 2026 挑战赛 MuJoCo 双任务场景。`basic_t0` 场景已通过人工控制完成 AAA 电池双侧夹持和抬升验证，并已建立可训练的低维特权状态 PPO/GRPO baseline。项目自有的 schema v2 真机同步采集与 LeRobotDataset 直写软件层也已实现；下一步是冻结硬件身份/标定并完成真实双相机验收。
+
+```mermaid
+flowchart TD
+    A["初赛需求分析与任务拆分<br/>已完成"]:::done --> B["独立项目结构与上游边界<br/>已完成"]:::done
+    B --> C["SO-101 任务、观测、动作与元数据契约<br/>已完成首版"]:::done
+    C --> D["LeRobotDataset → OpenVLA-OFT 适配器<br/>已完成模拟数据验收"]:::done
+    D --> E["模拟 LeRobotDataset v3<br/>已完成"]:::done
+    E --> F["A100 真实 OpenVLA-OFT<br/>前向、LoRA、200-step SFT、checkpoint 恢复<br/>已完成"]:::done
+
+    B --> S["2026 挑战赛 MuJoCo 双任务基础场景<br/>SO101 + AAA 电池动力学<br/>T0 人工抓取已验证"]:::done
+    S --> SRL["Basic T0 低维状态 RL baseline<br/>PPO + 完整轨迹 GRPO<br/>训练/评估/checkpoint 已打通"]:::done
+
+    B --> G["leader/follower 初始化、校准与安全控制<br/>待真机确认"]:::next
+    G --> H["固定 RGB-D 安装、RGB/depth 同步与标定<br/>下一步"]:::next
+    C --> I["项目真机录制入口<br/>软件完成，待硬件验收"]:::next
+    H --> I
+    F --> I
+    I --> J["小规模真机示范采集与质量检查"]:::planned
+    J --> K["真实数据适配、单 batch 前向与小数据过拟合"]:::planned
+    K --> L["扩大真机数据集并完成 OpenVLA-OFT SFT"]:::planned
+    L --> M["冻结共同 SFT checkpoint 与真机评估基线"]:::planned
+
+    M --> R1["路线 A：仅真机 RL<br/>真机环境、真机 rollout、真机更新"]:::routeA
+    M --> R2["路线 B：真机 + 仿真混合 RL<br/>任务/RL 接口、仿真 RL、真机 RL 校正"]:::routeB
+    SRL --> R2
+    R1 --> MA["real_only/metrics.jsonl"]:::metric
+    R2 --> MB["hybrid/metrics.jsonl"]:::metric
+    MA --> N["相同真机测试集、初始状态、任务与安全约束<br/>统一评估并比较两条路线"]:::planned
+    MB --> N
+    N --> O["选择最终策略并回流失败数据"]:::planned
+    O --> L
+    O --> P["比赛任务调度器、推理服务与安全部署"]:::planned
+    P --> Q["完整比赛流程与正式验收"]:::planned
+
+    classDef done fill:#d9ead3,stroke:#38761d,color:#1f1f1f;
+    classDef next fill:#fff2cc,stroke:#bf9000,color:#1f1f1f;
+    classDef planned fill:#eeeeee,stroke:#666666,color:#1f1f1f;
+    classDef routeA fill:#cfe2f3,stroke:#0b5394,color:#1f1f1f;
+    classDef routeB fill:#d9d2e9,stroke:#674ea7,color:#1f1f1f;
+    classDef metric fill:#fce5cd,stroke:#b45f06,color:#1f1f1f;
+```
+
+图中绿色表示已经完成并有验证结果，黄色表示当前优先任务，灰色表示后续公共流程，蓝色和紫色分别表示两条 RL 对照路线。当前 PPO/GRPO 结果是验证训练软件链路的 MLP baseline，不是已达到任务成功率的 VLA 策略。两条最终对照路线仍必须从同一个真实 SFT checkpoint 出发，并使用相同的真机测试协议生成最终比较指标。
+
 ## 开发调试规范
 
 - **以实际进展为准**：只记录已经确认的配置、操作和结果；未验证的内容明确标注，不把计划写成已实现的功能。
@@ -21,12 +66,13 @@ real_so101_vla_rl/
 ├── src/
 │   └── real_so101_vla_rl/
 │       ├── data/             # 数据加载、转换和检查
+│       ├── assets/mujoco/    # SO101、比赛底图、电池和 MuJoCo 场景资产
 │       ├── models/           # OpenVLA 模型适配与微调
 │       ├── robot/            # SO-101 控制与安全接口
 │       ├── envs/             # 仿真与真机环境
 │       ├── rewards/          # 比赛规则对应的奖励计算
 │       └── rl/
-│           ├── rollout/      # 仿真与真机轨迹采集
+│           ├── rollout/      # 仿真与真机轨迹采集（不代指整个训练流程）
 │           ├── algorithms/   # 强化学习算法
 │           └── trainer/      # VLA-RL 训练调度
 ├── configs/
@@ -315,13 +361,17 @@ lerobot-calibrate \
         ↓
 预训练 VLA 的监督微调（SFT）
         ↓
-真机离线评估与失败数据补采
-        ↓
-构建自动奖励和 SO-101 训练环境
-        ↓
-VLA 强化学习微调
-        ↓
-固定测试集评估和比赛流程验证
+冻结共同 SFT checkpoint 和真机基线
+        ├───────────────┐
+        ↓               ↓
+仅真机 RL        真机 + 仿真混合 RL
+        ↓               ↓
+独立 metrics      独立 metrics
+        └───────┬───────┘
+                ↓
+相同真机测试集统一比较
+                ↓
+选择最终策略并完成比赛流程验证
 ```
 
 首轮数据可以从每种子任务约 50 条高质量轨迹开始验证。若要覆盖四种颜色、不同初始位置和四个目标区域，预计需要数百条经过平衡采样的有效轨迹；实际数量应由独立测试集成功率决定，而不是预先固定。
@@ -334,7 +384,7 @@ VLA 强化学习微调
 - 当前 `SimpleVLA-RL` 代码主要支持 OpenVLA/OpenVLA-OFT 在 LIBERO 和 RoboTwin 中训练，其公开代码尚未直接提供 SO-101 真机强化学习环境。
 - 当前 `RLinf` 包含 LeRobot 数据接口和部分模型的 SO-101 动作配置，但公开的真机环境列表中没有可直接运行的 SO-101 环境。
 
-因此，项目不能直接运行现有 VLA-RL 示例完成比赛。需要实现一层 SO-101 适配：统一观测和动作格式、连接真机 rollout、自动复位或训练回合管理、比赛规则奖励、动作安全限制及评估记录。
+因此，项目不能直接运行现有 VLA-RL 示例完成比赛。当前已独立实现 `basic_t0` 的 SO-101 低维状态适配、连续动作、随机复位、比赛分阶段奖励、PPO/GRPO 更新与评估记录；真机环境、视觉 VLA 策略、安全限制和序列任务仍需通过同一组公共接口接入。
 
 ## 第三章：OpenVLA + VLA-RL 开发任务清单
 
@@ -345,8 +395,9 @@ VLA 强化学习微调
 - **机器人与数据层**：使用 LeRobot 驱动 SO-101 leader/follower、采集遥操作轨迹并保存图像、关节状态、动作和语言指令。
 - **基础模型**：使用预训练 OpenVLA，不从零训练视觉语言模型。
 - **监督微调**：采用 OpenVLA-OFT 的连续动作预测和 action chunk 方案，将 OpenVLA 适配为输出 SO-101 六维关节动作的策略。
-- **强化学习**：以监督微调模型为初始策略，使用 VLA-RL 优化完整任务成功率、序列执行、精确放置和失败恢复。
-- **RL 主框架**：优先基于 `SimpleVLA-RL` 适配 OpenVLA-OFT 和 SO-101；`RLinf` 的真机环境设计作为实现参考，第一版不同时维护两套训练入口。
+- **强化学习**：冻结同一个真实 OpenVLA-OFT SFT checkpoint 作为共同起点，并行训练“仅真机 RL”和“真机 + 仿真混合 RL”两个版本，优化完整任务成功率、序列执行、精确放置和失败恢复。
+- **RL 代码边界**：项目维护一套公共 SO-101 观测、动作、奖励、安全和 rollout 接口，在配置层区分两条训练路线。优先参考并迁移 `SimpleVLA-RL` 的 OpenVLA-OFT 训练结构，参考 `RLinf` 的环境组织方式，不直接修改两个上游仓库。
+- **RL 对照原则**：两条路线使用同一个 SFT 初始权重、相同真机测试集、任务分布、安全约束和真实交互预算，分别保存独立 metrics；最终依据统一真机评估结果选择方案，不直接比较量纲不同的仿真 reward 与真机 reward。
 - **训练算力**：训练任务在云端 GPU 服务器运行；本地电脑负责真机控制、数据采集、奖励观测和安全停止。部署阶段根据延迟测试决定使用云端推理还是下载模型到本地 GPU 设备。
 - **任务执行方式**：比赛口令拆成单块语言子任务，由同一个 VLA 依次执行；任务调度器负责子任务顺序、完成判断和重试次数。
 
@@ -365,21 +416,11 @@ VLA 是机械臂动作的生成策略，规则判定器、训练奖励、安全�
 
 ### 3.3 总体依赖关系
 
-```mermaid
-flowchart TD
-    A[冻结任务与接口定义] --> B[SO-101 与相机闭环]
-    B --> C[真机示范采集]
-    B --> D[SO-101 仿真与奖励环境]
-    C --> E[OpenVLA 数据与动作适配]
-    E --> F[OpenVLA-OFT 监督微调]
-    D --> G[VLA-RL 环境接入]
-    F --> G
-    G --> H[强化学习训练]
-    H --> I[真机部署与闭环评估]
-    I --> J[失败数据回流与再训练]
-    J --> I
-    I --> K[完整比赛验收]
-```
+README 开头的总览图是项目当前的完整依赖关系。后续开发必须遵守三个关键依赖：
+
+1. 真实 SFT 必须建立在通过质量检查的真机 LeRobotDataset 上；模拟 SFT 只验证软件链路。
+2. 两条 RL 路线必须从同一个冻结 SFT checkpoint 出发，避免把 SFT 差异误认为 RL 方法差异。
+3. 两条路线最终都在同一套真机评估回合中比较；仿真数据只能作为混合路线的额外训练来源，不能代替真机测试。
 
 ### 3.4 分阶段开发清单
 
@@ -390,7 +431,7 @@ flowchart TD
 - [x] 定义颜色枚举：`red`、`blue`、`yellow`、`green`。
 - [x] 定义回合的 `success`、`failure`、`timeout` 和 `abort` 条件。
 - [ ] 将比赛得分项和扣分项转换成程序可记录的事件。
-- [ ] 固定观测、动作、控制频率、图像分辨率和时间戳格式。
+- [x] 固定观测、动作、控制频率、图像分辨率和时间戳格式。
 - [ ] 固定机器人、相机、任务底图和电池的安装与复位方法。
 
 **阶段产物**：任务配置格式、SO-101 环境接口文档和比赛评分事件表。
@@ -402,8 +443,8 @@ flowchart TD
 - [ ] 初始化并校准 leader 臂和 follower 臂的全部舵机。
 - [ ] 验证 follower 六个关节状态能够连续读取，目标关节位置能够稳定下发。
 - [ ] 验证 leader 到 follower 的遥操作方向、零位和夹爪开合一致。
-- [ ] 固定俯视工作区相机；如单目画面不能可靠判断抬升和掉落，再增加侧视相机。
-- [ ] 完成相机采集、关节状态和动作的时间同步测试。
+- [ ] 固定斜上方全局 RGB-D 和腕部 RGB，完成 RGB/depth 对齐以及相机内外参标定。
+- [ ] 完成 RGB、depth、关节状态和动作的时间同步测试。
 - [ ] 验证机械臂能够到达四个初始槽位、`T0`、`P1`、`P2` 和 `P3`。
 - [ ] 实现初始姿态、休息姿态和安全撤离姿态。
 - [ ] 实现关节限位、单步动作限幅、通信超时停止和人工急停。
@@ -418,12 +459,14 @@ flowchart TD
 - [x] 为单块任务生成统一语言指令，例如 `Pick up the red battery and place it in T0.`。
 - [x] 为序列任务生成三个带目标位次的子任务指令。
 - [x] 首版训练使用规范英文指令；比赛中文任务由上层调度器转换，后续按需要增加双语数据。
-- [ ] 使用 leader 遥操作 follower，按 LeRobotDataset 格式同步记录相机、关节状态、动作、任务文本和时间戳。
+- [x] 实现 leader/follower 录制编排、双 RGB/对齐深度/关节状态同步、schema v2 严格验帧和 LeRobotDataset 直写；保存 `robot.send_action()` 返回的最终动作。
+- [ ] 在真实 leader/follower 和双相机上验收 30 Hz、25 ms 同步阈值、异常丢弃及人工确认流程。
 - [ ] 平衡覆盖四种颜色、不同初始槽位、四个目标区域及小范围位置和角度偏差。
 - [ ] 每条成功轨迹包含预抓取、下降、闭合、抬升、搬运、下降、释放、稳定等待和撤离全过程。
 - [x] 定义 episode 成功状态和失败类型，并让 SFT 数据选择只接受成功轨迹。
 - [ ] 实现轨迹回放、图像预览、动作曲线和时间同步检查工具。
 - [x] 实现按 `layout_id` 分组的 episode 级训练集、验证集和测试集划分，避免同一布局跨集合泄漏。
+- [x] 使用 LeRobot 的真实写入 API 生成六个模拟 episode，并生成项目元数据、训练集归一化统计和固定数据划分，用于训练链路验收。
 - [ ] 先采集小规模试验集打通训练，再逐步扩充到覆盖完整变化的数百条有效轨迹。
 
 **阶段产物**：版本化 LeRobot 数据集、数据统计报告、数据检查工具和固定测试集。
@@ -433,13 +476,14 @@ flowchart TD
 #### 阶段 3：实现 SO-101 到 OpenVLA 的适配层
 
 - [x] 定义 OpenVLA 输入：相机图像、六维关节状态和语言子任务。
-- [ ] 将 LeRobotDataset 转换或直接加载为 OpenVLA-OFT 所需的数据结构。
+- [x] 直接加载 LeRobotDataset，并转换为 OpenVLA-OFT 所需的 token、图像、proprio、动作块和 padding mask。
 - [x] 固定 SO-101 六维绝对关节目标的名称、顺序和单位。
 - [x] 实现训练集关节动作及状态的 `BOUNDS_Q99` 归一化统计结构和计算函数。
 - [x] 配置长度为 8 的 action chunk、30 FPS 时间偏移和 episode 尾部补齐掩码。
 - [ ] 实现模型输出反归一化、关节名称映射和动作安全裁剪。
 - [ ] 验证数据加载后图像通道、关节顺序、夹爪方向和语言指令均正确。
 - [ ] 使用记录轨迹执行离线前向推理，确认模型输出维度、数值范围和动作时间顺序正确。
+- [x] 使用模拟 LeRobotDataset 验证上述数据契约，并完成真实 OpenVLA processor、模型前向和 LoRA 反向传播测试。
 
 **阶段产物**：数据适配器、SO-101 动作头配置、归一化文件和离线推理测试。
 
@@ -447,13 +491,14 @@ flowchart TD
 
 #### 阶段 4：完成 OpenVLA-OFT 监督微调基线
 
-- [ ] 在云服务器创建可复现的 CUDA、PyTorch、OpenVLA-OFT 和 LeRobot 环境。
-- [ ] 固定预训练 OpenVLA 检查点、代码提交号和依赖版本。
-- [ ] 先用少量数据执行单批次过拟合和短训练，验证训练链路。
-- [ ] 优先使用 LoRA 完成第一轮微调，再根据效果和显存决定是否扩大可训练参数。
-- [ ] 记录训练损失、验证损失、学习率、吞吐量和检查点。
-- [ ] 导出可用于闭环推理的权重、处理器和归一化配置。
+- [x] 在 A100 云服务器创建并验证 CUDA、PyTorch、OpenVLA-OFT 和 LeRobot 环境。
+- [x] 固定预训练 OpenVLA 检查点、上游代码提交号和关键依赖版本。
+- [x] 使用模拟 LeRobotDataset 完成单批次前向、LoRA 单步更新和 200-step 过拟合训练，验证训练链路。
+- [x] 使用 LoRA rank 32 完成第一轮模拟数据微调及 checkpoint 保存、恢复和前向复验。
+- [x] 逐 optimizer step 记录训练损失、验证损失、学习率、梯度范数和检查点。
+- [x] 导出 LoRA adapter、action head、proprio projector、processor 和归一化统计。
 - [ ] 在固定测试集上评估颜色条件、动作误差和不同子任务表现。
+- [x] 确认独立模拟 test split 可以完成磁盘读取、模型前向和 masked L1 计算。
 - [ ] 将模型接入 follower，以低速、短 action chunk 和人工监护完成首次闭环 rollout。
 - [ ] 收集抓错、抓偏、早放、放置偏移和停滞等 SFT 失败案例。
 
@@ -461,54 +506,62 @@ flowchart TD
 
 **完成标准**：模型能够在测试场景中根据不同颜色和目标区域产生不同动作，并稳定完成部分真机抓取放置；未达到该标准前不进入 RL。
 
-#### 阶段 5：实现仿真任务和自动奖励
+#### 阶段 5：实现真机环境、公共接口和自动奖励
 
-- [ ] 在 `SimpleVLA-RL` 支持的仿真环境中加入 SO-101 模型、夹爪和正确关节约束。
-- [ ] 复现比赛底图、四个初始槽位、`T0`、`P1`～`P3` 外框和内框。
-- [ ] 随机化颜色排列、电池小范围位置与角度、相机误差和光照。
-- [ ] 让仿真观测和动作字段与真机接口一致。
-- [ ] 实现正确颜色、稳定抓取、离台、到达目标上方、进入外框、进入内框和稳定释放奖励。
-- [ ] 实现抓错、掉落、碰撞、越界、超时和扰动非目标电池惩罚。
-- [ ] 实现任务完成、失败终止、最大步数和环境复位。
-- [ ] 使用脚本策略或示范轨迹检查每个奖励是否在正确时刻触发。
-- [ ] 使用录制视频建立真机自动评分器，并与人工标注对比，验证奖励判定可信度。
+- [ ] 定义可供两条路线共用的 `reset/step/observation/action/reward/termination` 接口及奖励事件 schema。
+- [ ] 实现 SO-101 真机环境、人工或半自动复位流程、最大步数和回合终止。
+- [ ] 固定比赛底图、四个初始槽位、`T0`、`P1`～`P3` 外框和内框的坐标及判定容差。
+- [ ] 使用全局 RGB-D 实现正确颜色、稳定抓取、离台、到达目标上方、进入外框、进入内框和稳定释放事件。
+- [ ] 实现抓错、掉落、碰撞、越界、超时和扰动非目标电池事件。
+- [ ] 将事件转换为可配置的阶段奖励和惩罚，同时保留原始事件，避免只保存无法解释的总 reward。
+- [ ] 使用成功、失败和边界情况的录制视频建立奖励测试集，逐项检查事件触发时刻。
+- [ ] 将真机自动评分结果与人工标注对比，验证外框、内框、抬升、掉落和稳定时间判定。
+- [ ] 在公共接口中保留 `source=real|sim`，使混合路线后续能够接入同构仿真环境，而仅真机路线无需等待仿真建设。
 
-**阶段产物**：SO-101 比赛仿真环境、真机奖励判定器、回合管理器和奖励测试集。
+**阶段产物**：公共环境协议、SO-101 真机环境、真机奖励判定器、回合管理器和奖励测试集。
 
-**完成标准**：成功轨迹的累计奖励明显高于失败轨迹；外框、内框、稳定时间和扣分事件与人工判断一致。
+**完成标准**：成功轨迹的累计奖励明显高于失败轨迹；外框、内框、抬升、掉落、稳定时间和扣分事件与人工判断一致，真机回合能够可靠复位和终止。
 
-#### 阶段 6：接入并训练 VLA-RL
+#### 阶段 6：完成真机推理与安全 rollout 基础
 
-- [ ] 将 SO-101 仿真环境接入 `SimpleVLA-RL` 的 rollout 接口。
-- [ ] 从阶段 4 的 SFT 权重初始化策略，禁止从随机策略直接进行真机探索。
-- [ ] 配置策略更新、参考策略约束、采样温度、回合长度和检查点频率。
-- [ ] 先在单块 `T0` 任务上验证 rollout、奖励回传和参数更新闭环。
-- [ ] 扩展到一个电池进入 `P1`～`P3` 的精确放置训练。
-- [ ] 扩展到三块序列任务，增加连续完成和失败恢复奖励。
-- [ ] 监控奖励投机行为，防止模型通过推、撞或错误占位获得非预期奖励。
-- [ ] 分别评估训练内场景、未见颜色排列、位置扰动和相机扰动。
-- [ ] 保存 SFT 与各 RL 检查点，在完全相同的测试集上比较成功率。
-
-**阶段产物**：可复现的 VLA-RL 配置、训练曲线、模型检查点、仿真评估视频和消融对比。
-
-**完成标准**：RL 模型在独立仿真测试集上的完整任务成功率和内框放置率稳定高于 SFT 基线，且没有增加碰撞、掉落或越界。
-
-#### 阶段 7：真机推理与强化学习闭环
-
+- [ ] 冻结阶段 4 的真实 SFT checkpoint，记录代码、配置、数据、归一化统计和权重哈希。
 - [ ] 实现本地机器人进程和 GPU 推理进程之间的请求协议。
 - [ ] 每次请求包含最新图像、关节状态、当前子任务和时间戳；每次响应包含 action chunk、模型版本和生成时间。
 - [ ] 测量云端往返延迟、抖动、丢包和实际控制频率。
 - [ ] 实现动作缓存、滚动重规划、过期动作丢弃和网络中断停止。
 - [ ] 本地安全层在任何情况下都对关节动作进行限位和限幅。
 - [ ] 先使用记录观测进行影子推理，再进行低速真机 rollout。
-- [ ] 使用固定测试集评估 sim-to-real 差距，并补充真实失败数据。
-- [ ] 将真机成功、失败和人工安全中止分别标注后回流训练。
-- [ ] 在可控复位和人工监护下进行少量真机 RL；任何危险动作立即终止并赋予失败奖励。
-- [ ] 根据真机结果重新调整视觉随机化、动作噪声、奖励和数据分布。
+- [ ] 实现真机环境的回合复位、奖励事件、成功/失败终止和人工安全中止记录。
+- [ ] 使用人工标注回合验证 RGB-D 自动奖励与比赛判定一致。
 
-**阶段产物**：推理服务、本地机器人客户端、安全监控、真机 rollout 数据和 sim-to-real 调整记录。
+**阶段产物**：推理服务、本地机器人客户端、公共真机环境、安全监控、真机 rollout 数据和冻结 SFT 基线报告。
 
-**完成标准**：网络异常不会产生失控动作；RL 模型真机成功率高于 SFT 基线，并能在固定条件下重复完成任务。
+**完成标准**：网络异常不会产生失控动作；SFT 策略能够低速闭环运行；真机环境可以安全复位、执行、终止并生成可信奖励。
+
+#### 阶段 7：并行训练并比较两条 VLA-RL 路线
+
+- [ ] 配置公共策略更新、参考策略约束、采样温度、回合长度、检查点频率和 metrics schema。
+- [ ] **路线 A：仅真机 RL**。只使用真实 SO-101 rollout 和真机奖励更新策略，先打通单块 `T0`，再扩展到 `P1`～`P3` 和三块序列任务。
+- [ ] 路线 A 将逐步训练、rollout 和评估记录写入 `runs/rl/real_only/<run_id>/metrics.jsonl`。
+- [ ] **路线 B：真机 + 仿真混合 RL**。将 SO-101 仿真环境接入相同 rollout 接口，先进行仿真 RL，再使用真机 rollout 校正；混合比例和阶段切换由配置控制。
+- [x] 在 MuJoCo 中加入 SO-101 完整动力学模型、夹爪、正确关节约束、两张比赛底图和四节动态 AAA 电池，并建立 `basic_t0` 与 `sequence_p1_p2_p3` 两个可加载场景。
+- [x] 使用 T0 交互 Demo 人工控制六个舵机，完成蓝色 AAA 电池的双侧夹持和抬升，验证执行器、夹爪碰撞、电池接触与自由刚体动力学基本可用。
+- [x] 为 `basic_t0` 实现电池完整投影入区判定、轻量随机复位、特权状态观测、分阶段奖励、成功/失败终止和 Gymnasium 环境封装。
+- [x] 实现连续 `[8, 6]` action chunk 的 Squashed Gaussian MLP、PPO、完整轨迹 GRPO、同步环境采集、固定 reset 评估、JSONL 指标和 checkpoint 恢复。
+- [ ] 为 `sequence_p1_p2_p3` 实现独立任务环境、顺序状态和内/外框奖励判定。
+- [ ] 让仿真观测、动作、奖励事件和终止原因与公共真机接口一致，并随机化颜色排列、电池位姿、相机误差、光照和动力学参数。
+- [ ] 使用脚本策略和已知成功/失败轨迹验证仿真奖励，在开始混合更新前测量仿真与真机事件分布的差距。
+- [ ] 路线 B 将逐步训练、rollout 和评估记录写入 `runs/rl/hybrid/<run_id>/metrics.jsonl`，每条记录标明数据来自 `sim` 或 `real`。
+- [ ] 两条路线使用相同的真机交互回合预算；混合路线可以使用额外仿真回合，但必须单独统计，避免掩盖真实数据成本。
+- [ ] 保证两条路线共用同一真机 rollout、安全层和评估实现，训练记录中保存 `route=real_only|hybrid`。
+- [ ] 两条路线都监控奖励投机行为，防止模型通过推、撞、错误占位或拖延获得非预期奖励。
+- [ ] 分别评估训练内场景、未见颜色排列、位置扰动、相机扰动和三块完整序列。
+- [ ] 使用固定测试集评估 sim-to-real 差距，将真实失败和安全中止回流到后续训练。
+- [ ] 在同一个冻结真机测试集上比较 SFT、仅真机 RL 和混合 RL checkpoint。
+
+**阶段产物**：两套可复现的 RL 配置、两份独立 `metrics.jsonl`、训练曲线、模型 checkpoint、仿真评估视频和统一真机对照报告。
+
+**完成标准**：两条路线都能完整复现并在相同真机测试协议下完成评估；根据完整序列成功率、内框率、安全事件、耗时和真实交互成本判断哪条路线优于 SFT 基线及另一条路线。
 
 #### 阶段 8：实现比赛任务调度器
 
@@ -528,6 +581,7 @@ flowchart TD
 #### 阶段 9：系统评估与比赛验收
 
 - [ ] 建立与比赛评分表一致的自动评估报告。
+- [ ] 使用同一真机评估协议分别运行 SFT baseline、仅真机 RL 和混合 RL checkpoint，并从两份 RL metrics 生成对照报告。
 - [ ] 单独统计颜色识别、稳定抓取、外框放置、内框放置、稳定释放和完整序列成功率。
 - [ ] 使用未进入训练集的颜色排列和初始摆放完成正式测试。
 - [ ] 每个关键版本执行足够轮次，报告成功率和置信区间，不以少量成功录像代替评估。
@@ -535,6 +589,7 @@ flowchart TD
 - [ ] 以单块抓取放置成功率接近 97% 作为三块任务达到约 90% 成功率的优化目标。
 - [ ] 验证机械臂初始状态、底座固定、无人工干预和全程连续执行。
 - [ ] 验证录像能同时清晰展示机械臂、工作台、底图、全部电池、任务口令和计时画面。
+- [ ] 按预先固定的主指标选择最终路线，不在看到结果后更改测试集、成功定义或评分权重。
 - [ ] 冻结最终代码、模型权重、配置、依赖和启动步骤，并完成两次模拟正式比赛。
 
 **阶段产物**：最终评估报告、完整比赛录像、发布模型和可复现运行包。
@@ -549,15 +604,385 @@ flowchart TD
 | M1：真机可控 | 阶段 1 | SO-101、相机、遥操作和安全控制稳定 |
 | M2：数据可用 | 阶段 2～3 | 数据能直接进入 OpenVLA 并正确映射回 SO-101 动作 |
 | M3：SFT 基线 | 阶段 4 | OpenVLA-OFT 首次完成真机抓取放置 |
-| M4：RL 可训练 | 阶段 5～6 | SO-101 仿真、自动奖励和 VLA-RL 训练闭环跑通 |
-| M5：RL 上真机 | 阶段 7 | RL 模型安全部署，真机表现超过 SFT |
-| M6：比赛闭环 | 阶段 8～9 | 单色和三色任务均可一键运行并通过正式验收 |
+| M4：真机 RL 基础可用 | 阶段 5～6 | 公共接口、真机环境、自动奖励、安全 rollout 和回合管理通过验证 |
+| M5：双路线 RL 对照 | 阶段 6～7 | 仅真机 RL 与混合 RL 都能训练、安全部署并生成独立 metrics |
+| M6：比赛闭环 | 阶段 8～9 | 统一真机评估后选择最终路线，单色和三色任务均可一键运行并通过正式验收 |
 
-第一轮开发从 M0 和 M1 开始。当前最先要完成的任务依次为：
+M0 的任务、数据和训练接口已完成首版定义，M3 的模拟训练链路也已提前验证。当前工作回到 M1 和 M2 的真机基础，后续任务依次为：
 
 1. 完成 leader/follower 初始化、校准和遥操作验证。
 2. 固定任务底图、SO-101 底座和相机位置。
-3. 定义六维关节状态、六维关节动作、相机图像和任务文本的数据接口。
-4. 实现安全动作下发与硬件检查程序。
-5. 采集约 10 条试验轨迹，验证 LeRobot 数据的图像、状态、动作和语言同步。
-6. 用试验数据打通 OpenVLA 数据加载和单批次训练，再开始正式扩充数据集。
+3. 使用已实现的真机采集入口验收安全动作下发、同步阈值和失败清理。
+4. 采集约 10 条试验轨迹，验证 LeRobot 数据的图像、状态、动作和语言同步。
+5. 用真实试验数据复验现有 OpenVLA 适配器并完成小数据过拟合，再开始正式扩充数据集。
+
+### 3.6 当前进度摘要
+
+更新时间：2026-09-14。
+
+| 工作方向 | 当前状态 | 已获得的验证结果 | 下一步 |
+| --- | --- | --- | --- |
+| 项目结构与上游边界 | 已完成 | 项目代码使用独立 `src` 包；`RLinf/` 和 `SimpleVLA-RL/` 未被修改并继续忽略 | 按具体功能迁移所需的最小思路或代码 |
+| SO-101 数据定义 | schema v2 已完成 | 六维状态/绝对关节目标、30 Hz、overview+wrist 双 RGB、overview 对齐毫米深度、逐传感器时间戳和有效位均有严格校验 | 用真机轨迹检查数值分布、同步和夹爪实际方向 |
+| 真机同步录制 | 软件完成，待硬件验收 | Orbbec RGB-D、wrist RGB 和关节状态并发采集；25 ms 拒帧、失败整段清理、人工接受和最终动作直写已有假设备及真实 Dataset writer 测试 | 冻结 USB 身份、标定档案和 `hardware` extra 后进行真实 30 Hz 验收 |
+| 数据划分与归一化 | 已完成首版 | 成功 episode 筛选、按布局分组的 train/val/test、训练集指纹和 `BOUNDS_Q99` 已有测试 | 用真机训练集重新计算统计量 |
+| LeRobot → OpenVLA-OFT 适配 | 已完成模拟数据验收 | 磁盘数据读取、8 步动作窗口、prompt/token、图像处理、batch collator 和 masked L1 均已打通 | 输入第一批真实 LeRobotDataset 复验 |
+| 云端训练环境 | 已完成 | A100 40 GB 上离线加载真实 OpenVLA、运行真实 processor、前向、LoRA 反向和 checkpoint 恢复 | 固化云端启动脚本和真实训练数据同步方式 |
+| OpenVLA-OFT SFT | 模拟全链路已完成 | 200-step loss 明显下降并进入低位平台；最终 checkpoint 可以重新加载和前向 | 采集约 10 条真机试验轨迹并做短程过拟合 |
+| MuJoCo 基础任务场景 | 已完成并通过 T0 人工抓取 | 两张比赛底图、SO101 六轴动力学、四节自由 AAA 电池、相机和交互 Demo 已集成；蓝色电池已实现双侧夹持并抬升 10 mm 以上 | 单独验收序列场景操作路径 |
+| 真机闭环与安全层 | 未完成 | 当前只有数据接口和动作表示定义 | 完成 follower 校准、可达性、安全限幅和低速 rollout |
+| 统一 RL 环境与双路线对照 | Basic T0 MLP baseline 已完成工程链路 | 特权状态 Gymnasium 环境、连续 PPO/GRPO、轨迹采集、评估、metrics 和 checkpoint 已通过 smoke 验证 | 训练并审查 T0 策略行为，接入视觉 VLA 和序列任务 |
+
+模拟数据通过只能证明软件链路能够训练和保存模型，不能证明模型已经学会真实抓取。当前项目已经跨过“数据能否进入模型、loss 能否反向传播、checkpoint 能否恢复”的工程验证阶段，下一项关键工作是真机数据采集。
+
+### 3.7 SFT 后的双路线 RL 对照设计
+
+真实 OpenVLA-OFT SFT 完成后，先冻结一个共同 checkpoint，并记录代码、配置、数据集和权重哈希。两个 RL 实验从这一个 checkpoint 分叉；这里的“并行”表示两套相互隔离的实验路线，真机机械臂上的 rollout 仍按计划依次执行，不能同时控制同一台设备。
+
+| 对照项 | 路线 A：仅真机 RL | 路线 B：真机 + 仿真混合 RL |
+| --- | --- | --- |
+| 初始策略 | 同一个冻结 SFT checkpoint | 同一个冻结 SFT checkpoint |
+| 训练观测与动作 | 真实 RGB/RGB-D、关节状态和 SO-101 动作 | 与真机同构的仿真观测/动作，加真实 RGB/RGB-D、关节状态和 SO-101 动作 |
+| rollout 来源 | 只来自真机 | 仿真和真机，逐条标记 `source=sim` 或 `source=real` |
+| 策略更新 | 只使用真机经验 | 先用仿真提高样本量，再用真机校正；也允许按配置混合采样 |
+| 主要优势 | 数据分布与比赛现场一致 | 能低成本覆盖更多初始状态、失败和恢复情况 |
+| 主要风险 | 真机成本高、探索慢、安全压力大 | sim-to-real 偏差和仿真奖励投机 |
+| 训练指标 | `runs/rl/real_only/<run_id>/metrics.jsonl` | `runs/rl/hybrid/<run_id>/metrics.jsonl` |
+
+两份 metrics 使用同一个 schema，至少记录：
+
+```text
+route、event_type、source、run_id、checkpoint_sha256
+optimizer_step、episode_index、task_type、target_color、target_slot
+reward_total、reward_components、success、failure_type
+outer_frame_success、inner_frame_success、stable_release
+drop、collision、timeout、safety_abort、duration_s
+policy_loss、kl、learning_rate、grad_norm
+real_env_steps、sim_env_steps、inference_latency_ms
+```
+
+训练曲线用于排查各自是否稳定，最终优劣只依据统一真机评估。对照时固定：
+
+1. 相同的 SFT checkpoint 和归一化统计。
+2. 相同的真机训练回合或环境步预算；路线 B 的额外仿真步数单独报告。
+3. 相同的机械臂、相机标定、安全限制、任务集合、初始布局和最大回合时间。
+4. 相同的独立真机测试集、测试顺序和成功判定程序。
+5. 足够的重复回合和随机种子，报告均值、方差或置信区间，不用单次最好结果决定路线。
+
+核心比较指标按优先级设为：完整三块序列成功率、内框放置率、安全中止/碰撞/掉落率、单块成功率、平均完成时间和消耗的真实环境步数。仿真累计 reward 与真机累计 reward 只在各自路线内部观察，不能直接互相比较。
+
+## 第四章：阶段开发与专项验证记录
+
+### 4.1 SO-101 数据契约与项目元数据
+
+#### 为什么这样定义
+
+OpenVLA-OFT 的上游任务通常使用其他机器人动作维度，不能直接假设 SO-101 也是七维动作或使用统一的 `[-1, 1]` 原始关节单位。动作顺序、单位或夹爪范围只要有一项错位，训练 loss 仍可能下降，但模型输出会被发送到错误关节，因此必须先以实际 LeRobot SO-101 实现为准冻结数据契约。
+
+本项目重新核对了 `/home/sdc/lerobot` 中的 SO follower 和数据录制流程：
+
+- `SOFollower` 将舵机 1～6 依次定义为 `shoulder_pan`、`shoulder_lift`、`elbow_flex`、`wrist_flex`、`wrist_roll`、`gripper`。
+- `use_degrees=true` 时，前五个关节由 LeRobot 输出角度；夹爪始终使用 LeRobot 的 `0～100` 范围。
+- `hw_to_dataset_features()` 将状态和动作转换为 float32 六维向量，并把相机转换为 HWC 的 RGB 图像或视频字段。
+- LeRobotDataset 自动维护 `timestamp`、`frame_index`、`episode_index`、`index` 和 `task_index`。其中 `task_index` 是指向数据集任务表的整数索引，语言任务本身仍从 `task` 字段读取。
+
+schema v2 数据契约因此固定为：
+
+```text
+observation.images.overview:       RGB uint8[480,640,3]
+observation.images.wrist:          RGB uint8[480,640,3]
+observation.images.overview_depth: 深度 uint16[480,640,1]，单位 mm
+observation.state:                 float32[6]
+action:                            float32[6]，绝对关节目标
+task:                              规范英文原子指令
+observation.timestamps.*_ns:       三路视觉和 state 的 int64[1] host monotonic 时间
+observation.valid.*:               三路视觉和 state 的 bool[1] 有效位
+fps:                               30
+action chunk:                      8×6
+```
+
+正式数据集只保存四种观测全部有效的帧。LeRobot 自动维护的顶层
+`timestamp=frame_index/30` 是名义控制时间；各传感器时间戳来自
+`time.monotonic_ns()`，用于检查图像、深度与关节状态的实际同步关系，不能
+解释为 UTC 时间。旧的 `observation.images.front` 和 schema v1 元数据不做
+隐式迁移，会在加载时被明确拒绝。
+
+录制字段和模型输入字段彼此独立：当前 OpenVLA 只接收顺序固定为
+`overview → wrist` 的双 RGB、`observation.state` 和 `task`。深度、采集
+时间和有效位用于几何、安全、诊断和数据质检，不进入当前视觉骨干；`action`
+是训练目标而不是模型条件输入。
+
+项目在 `project_meta/` 中额外保存 episode 清单、数据划分、机器人与相机配置、标定快照及哈希、训练集归一化统计。这些信息不替代 LeRobotDataset 自带元数据，而是补充比赛任务语义和训练可追溯信息。
+
+#### 解决思路
+
+数据层先验证字段名称、dtype、shape、关节顺序、机器人类型、相机字段和控制频率，再允许构造训练样本。所有任务文本必须符合以下原子模板：
+
+```text
+Pick up the {red|blue|yellow|green} battery and place it in {T0|P1|P2|P3}.
+```
+
+数据划分只接受 `success=true` 的完整 episode，并按 `layout_id` 分组，禁止把同一条轨迹的帧随机分散到多个集合。`norm_stats.json` 只使用 train episode 计算；文件同时保存训练 episode 指纹，加载器会检查它与 `splits.train` 是否一致，避免验证集或测试集信息进入归一化统计。
+
+`BOUNDS_Q99` 归一化在样本送入模型前使用，把状态和动作按训练集的 `q01/q99` 裁剪并映射到 `[-1, 1]`。它使不同量纲和运动范围的关节处于相近数值尺度。推理阶段需要使用 checkpoint 中同一份统计量把模型输出反归一化为 SO-101 关节目标；不能在 val/test 或推理现场重新计算统计量。
+
+#### 如何验证
+
+- 测试规范任务的生成和解析，并拒绝颜色、目标位或序列步不一致的任务。
+- 测试关节字典始终按六个固定关节排序，拒绝错误维度、缺失字段及额外调用方字段。
+- 使用来自实际标定格式的快照推导前五轴角度范围和夹爪 `0～100` 范围，并校验标定哈希。
+- 验证失败 episode 不进入 split，同一布局不会跨集合，三组 episode 不重叠。
+- 修改归一化文件中的训练集指纹后，加载器必须立即拒绝数据。
+
+### 4.2 LeRobotDataset 到 OpenVLA-OFT 的接口适配
+
+#### 需要解决的问题
+
+LeRobotDataset 返回机器人数据，OpenVLA-OFT 训练入口需要语言 token、处理后的图像、归一化 proprio、连续动作块和监督标签。这两层字段用途不同，不能把原始 LeRobot 样本直接传给模型。
+
+#### 解决思路
+
+适配分为三层：
+
+1. **LeRobot 加载层**：根据 split 选择 episode，并请求时间偏移 `[0/30, 1/30, ..., 7/30]` 的动作窗口。
+2. **单样本转换层**：按 `overview → wrist` 顺序分别把两幅 RGB 交给真实 OpenVLA image processor，再沿通道维组合；将任务改写为 OpenVLA 问句；归一化当前状态和 `8×6` 动作块；生成动作占位 token。深度、时间戳和有效位不会进入模型张量。
+3. **batch 层**：对文本 token 右侧补齐，生成 `attention_mask`，再堆叠图像、状态、动作及 `action_is_pad`。
+
+模型样本的 `labels` 与 `input_ids` 对齐。任务提示部分使用 `-100`，表示这部分不计入语言模型损失；动作 token 位置仍保留监督标签。任务文本没有被删除，它仍存在于 `input_ids` 中并作为模型条件输入。
+
+episode 尾部不足 8 步时，LeRobot 会重复最后一个动作并设置 `action_is_pad=true`。项目的 `masked_action_l1` 只统计有效时间步：
+
+```python
+valid = (~action_is_pad).unsqueeze(-1).expand_as(actions)
+loss = abs(predicted_actions - actions)[valid].mean()
+```
+
+这样可以防止重复补齐动作改变训练目标。当前动作如果已经被标成 padding，或者一个动作块全部无效，数据会被直接拒绝。
+
+#### 如何验证
+
+- 本地使用可注入的假 tokenizer、动作 tokenizer 和图像处理器验证转换逻辑，全程不访问 Hugging Face，也不下载模型。
+- 使用真正的 `LeRobotDataset.create/add_frame/save_episode/finalize` 创建临时数据集，再重新打开，确认返回 `action[8,6]` 和 `action_is_pad[8]`。
+- 在 episode 倒数第二帧读取动作窗口，确认前两步有效、后六步重复末动作并标成 padding，证明窗口不会跨越 episode。
+- 分别修改 padding 位置和有效位置的目标动作：前者不能改变 masked L1，后者必须改变 loss。
+- 测试不同长度 prompt 的右侧补齐、`labels=-100` 区域、batch shape 和 dtype。
+
+### 4.3 云端 OpenVLA-OFT 环境与真实组件冒烟测试
+
+#### 需要解决的问题
+
+本地电脑不需要保存或加载完整 OpenVLA 7B 权重，但只用假组件通过单元测试仍不能证明真实 processor、OpenVLA-OFT 连续动作头和 LoRA 能一起工作。因此真实模型联调放在 A100 云服务器完成，并使用本地模型缓存离线运行。
+
+#### 解决思路
+
+云端环境固定为 Python 3.12、PyTorch 2.7.1 CUDA 12.8、FlashAttention 2.7.4.post1 和 LeRobot 0.6.2。上游版本固定为：
+
+| 组件 | 固定版本或提交 |
+| --- | --- |
+| LeRobot | `4aaff99be4a1d81568c08c8f0296b41b40c99ec4` |
+| OpenVLA-OFT | `e4287e94541f459edc4feabc4e181f537cd569a8` |
+| Transformers OpenVLA-OFT fork | `bc339d9ad707454c0c115970db43c260067c61ab` |
+| 基础权重 | `openvla/openvla-7b` |
+
+三个上游 checkout 保持原样。兼容处理只应用于数据盘中的工作副本，用于移除不需要的 RLDS/TensorFlow 导入副作用，并把 OpenVLA-OFT 常量显式设置为 SO-101 的 8 步、6 维动作和 6 维 proprio。
+
+#### 如何验证
+
+验证按依赖关系逐步增加真实组件：
+
+1. 真实 processor 转换一个项目样本，确认 prompt、图像和动作 token 能生成。
+2. 加载真实 7B 基础权重，运行 vision-language backbone、proprio projector 和连续动作头，确认预测形状为 `[1,8,6]` 且 loss 有限。
+3. 加入 LoRA，执行一次反向传播，确认 LoRA 梯度非零、数值有限，并确认 optimizer step 后参数实际改变。
+4. 使用正式 rank 32、batch size 2 配置做训练前检查，模型 batch 为 `actions[2,8,6]`、`proprio[2,6]`、`pixel_values[2,12,224,224]`，预测为 `[2,8,6]`。
+
+这组测试把“数据转换正确”“模型可以前向”“梯度可以回传”“参数确实更新”分开验证，便于定位问题发生在数据、模型注册、显存还是优化器。
+
+### 4.4 模拟 LeRobot → OpenVLA-OFT SFT 全流程验证
+
+#### 为什么需要专项验证
+
+这项验证的目标不是让模型从示意图学会真实抓取，而是回答以下工程问题：
+
+- 项目生成的数据是否真的是可落盘、可重新读取的 LeRobotDataset v3。
+- 项目适配器是否被训练入口真实调用。
+- OpenVLA-OFT 的连续动作 LoRA 训练能否在有限数据上降低并收敛 loss。
+- 训练日志、验证、测试、checkpoint 和恢复流程是否完整可用。
+
+如果模型连简单的确定性模拟数据都不能过拟合，说明数据字段、监督位置、动作维度、padding loss 或训练循环仍存在问题，不应直接消耗真机数据和云端训练时间。
+
+#### 模拟数据如何生成
+
+生成器直接调用 LeRobot 0.6.2 的 `LeRobotDataset.create/add_frame/save_episode/finalize`，并使用 `hw_to_dataset_features` 和 `build_dataset_frame` 创建与实机录制相同的字段。训练脚本随后从已经 finalize 的磁盘目录重新创建 LeRobotDataset，不从生成器内部传递临时 Tensor。
+
+数据共 6 个 episode，每个 24 帧、30 Hz：4 个 train episode 覆盖 red/T0、blue/P1、yellow/P2、green/P3，val 和 test 各使用一个独立布局。schema v2 生成互相可区分的 overview/wrist `480×640×3` RGB、对齐的 `480×640×1` 毫米深度、确定性时间戳和全真有效位；状态和动作使用简单的确定性六维绝对关节目标，使模型能够在短时间内过拟合并暴露训练链路问题。
+
+云端数据位于：
+
+```text
+/root/autodl-tmp/datasets/so101_synthetic_overfit_v2_lossless_depth
+```
+
+LeRobot v3 将两路 RGB 帧编码到：
+
+```text
+videos/observation.images.overview/chunk-000/file-000.mp4
+videos/observation.images.wrist/chunk-000/file-000.mp4
+```
+
+对齐深度不进行视频量化，而是以无损 uint16 毫米 TIFF 载荷嵌入
+Parquet。其逻辑帧路径保留为：
+
+```text
+images/observation.images.overview_depth/episode-000000/frame-000000.tiff
+```
+
+本机预览位于以下被 `.gitignore` 忽略的验收目录：
+
+```text
+artifacts/synthetic_dataset_preview/so101_synthetic_6episodes.mp4
+artifacts/synthetic_dataset_preview/episode_contact_sheet.png
+```
+
+#### 训练配置与结果
+
+下面的 loss、显存和 checkpoint 数据是 schema v1 单 RGB 链路的历史验收记录，
+保留用于回归对照，不能作为 schema v2 双 RGB 已完成云端训练的证明。v2 数据集
+与旧 checkpoint 不兼容，需重新运行云端训练后补充对应结果。
+
+训练使用 A100 40 GB、bf16、LoRA rank 32、alpha 16、batch size 2、学习率 `5e-4`、cosine scheduler 和 6 步 warmup，共运行 200 个 optimizer step。图像增强关闭，以减少过拟合验收中的随机干扰。
+
+| 指标 | 结果 |
+| --- | ---: |
+| 前 10 步 train loss 均值 | 1.95586 |
+| 第 41～50 步 train loss 均值 | 0.57617 |
+| 最后 10 步 train loss 均值 | 0.02421 |
+| 最后 10 步 / 前 10 步 | 1.24% |
+| 最终单步 train loss | 0.01929 |
+| 最终 validation loss | 0.05475 |
+| 最终 test loss | 0.32585 |
+| 总训练时间 | 149.93 秒 |
+| 峰值 GPU 显存 | 17.18 GiB |
+
+原始逐步 loss 存入 `metrics.jsonl` 和 `metrics.csv`，曲线同时绘制原始 train loss、10 步移动平均和每 20 步 validation loss。loss 前段明显下降，后段进入低位平台；validation 在第 120 步有一次波动，之后继续下降至 0.05475。这个趋势满足本次“训练链路能在小数据上过拟合”的人工验收目标。
+
+云端完整结果位于：
+
+```text
+/root/autodl-tmp/runs/so101_synthetic_overfit_v1
+```
+
+本机拉回的验收文件位于：
+
+```text
+artifacts/cloud_runs/so101_synthetic_overfit_v1/
+├── metrics.jsonl
+├── metrics.csv
+├── loss_curve.png
+├── run_manifest.json
+└── checkpoint_preflight.json
+```
+
+#### checkpoint 恢复验证
+
+训练分别保存第 100 步和第 200 步 checkpoint，每个 checkpoint 包含 LoRA adapter、action head、proprio projector、processor、数据归一化统计和 trainer state，不复制或合并完整 7B 权重。
+
+第 200 步 checkpoint 已重新加载，并再次从磁盘 LeRobotDataset 取得 batch 完成真实前向：
+
+```text
+predicted_actions: [2, 8, 6]
+masked L1:         0.024658
+peak GPU memory:   15.34 GiB
+```
+
+恢复后的 loss 与训练末段 10 步均值 0.02421 接近，说明保存的 LoRA、两个连续动作组件和 processor 可以组合复用，checkpoint 不是只能写出而无法加载的文件。
+
+#### 当前结论的边界
+
+本次结果证明以下软件链路已经打通：
+
+```text
+磁盘 LeRobotDataset v3
+→ 项目数据加载与 OpenVLA-OFT 适配器
+→ 真实 OpenVLA 7B + LoRA 连续动作训练
+→ 指标、曲线和 checkpoint
+→ checkpoint 重新加载与前向
+```
+
+模拟视频是颜色块和目标区的二维示意图，动作也是人为设置的确定性目标，因此 test loss 不能解释为真实比赛泛化能力。真实抓取能力仍需用同一台 follower、相机、任务底图和电池采集的轨迹训练和评估。
+
+### 4.5 MuJoCo 双任务场景与抓取验证
+
+项目已经建立 `basic_t0` 和 `sequence_p1_p2_p3` 两个 MuJoCo 场景。两个入口场景共享比赛坐标适配后的 SO101 Menagerie 动力学模型，以及红、黄、蓝、绿四节 AAA 自由刚体电池；场景同时包含底板碰撞层、无碰撞底图纹理、Free/俯视/腕部相机和灯光。详细资产结构、尺寸与操作方法见 [`competition_2026/README.md`](src/real_so101_vla_rl/assets/mujoco/competition_2026/README.md)。
+
+使用 `scripts/demo_mujoco_t0_grasp.py` 进行人工验证时，已经在 `basic_t0` 场景中控制机械臂接近蓝色电池，使电池同时接触固定夹爪和活动夹爪，并将其抬升至初始位置 10 mm 以上。截图左侧显示蓝色电池处于夹爪之间并离开底板，右侧终端同时给出“双侧接触”“抬升”和“成功”诊断：
+
+![MuJoCo T0 场景中 SO101 双侧夹持并抬升蓝色 AAA 电池的人工验收截图](src/real_so101_vla_rl/assets/mujoco/competition_2026/evidence/t0_manual_grasp_validation.png)
+
+这次验证证明机械臂位置执行器、夹爪碰撞体、电池自由关节和接触动力学已经能够组成基本抓取链路。它尚不证明自动策略、T0 放置、P1～P3 顺序放置或 sim-to-real 效果。
+
+在该场景上，项目已进一步实现 `SO101BasicT0Env`。当前 MLP baseline
+读取 92 维低维特权状态，包括机械臂关节、TCP、四节电池位姿/速度、目标颜色、
+T0 相对几何和接触状态；这不等同于只输入 proprioception。策略输出与
+OpenVLA-OFT 数据契约一致的 `[8, 6]` 连续绝对关节目标。奖励保留靠近、双侧夹持、
+抬升、搬运、完整入区、释放、稳定成功和失败原因的独立分项。
+
+训练代码不把“轨迹采集”用来代指整个 RL 流程：环境交互只负责生成数据，
+之后由算法层计算 GAE 或组内相对优势并更新策略，再由 trainer 独立执行固定 reset
+评估、JSONL 指标和 checkpoint。PPO 采用可配置的每环境 32 chunk 更新窗口；
+GRPO 使用相同 `ResetSnapshot` 真实运行每组四条完整 MuJoCo 轨迹。
+
+```bash
+conda run --no-capture-output -n lerobot \
+  python scripts/train_mujoco_rl.py \
+  --config configs/rl/ppo_t0_mlp.yaml \
+  --smoke
+
+conda run --no-capture-output -n lerobot \
+  python scripts/train_mujoco_rl.py \
+  --config configs/rl/grpo_t0_mlp.yaml \
+  --smoke
+```
+
+`--smoke` 只用两次短更新验证工程链路，不代表策略已学会抓取或放置。
+完整配置、恢复和评估命令见 [`configs/rl/README.md`](configs/rl/README.md)。
+
+### 4.6 实机同步录制软件层
+
+当前 LeRobot `lerobot_record.py` 先计算 `robot_action_to_send`，再调用 `robot.send_action()`，但写入数据集的仍是 `act_processed_teleop`。当 teleop processor 和 robot processor 都是 identity，并且 follower 的安全裁剪未触发时，两者相同；一旦 robot processor 改写动作或 `max_relative_target` 触发裁剪，记录动作就可能不同于最终下发动作。
+
+项目现已提供 `scripts/record_so101_lerobot.py`：Orbbec adapter 输出同一 frameset 的 overview RGB 和 D2C 对齐深度，OpenCV adapter 显式完成 wrist BGR→RGB，同步器并发读取三个硬件源并限制 host monotonic 时间跨度不超过 25 ms。任一观测无效、超时、重复或不同步都会清空整个待定 episode；只有操作者明确接受后才调用 `save_episode()`。
+
+项目录制器已改为把 `robot.send_action()` 的返回值写入 `action`，并用假 follower 的裁剪返回值完成了自动测试和真实 LeRobotDataset writer 落盘/重开验证。尚未完成的是低速真机专项验收：需要故意触发一次安全裁剪，并测量真实双相机在 30 Hz 下的同步通过率。
+
+### 4.7 当前自动化测试范围
+
+当前完整测试结果为 `93 passed`；Ruff 静态检查通过。测试范围如下：
+
+| 测试层 | 主要验证内容 |
+| --- | --- |
+| 数据 schema | 任务模板、颜色与目标位、六维关节顺序、字段集合、dtype 和 shape |
+| episode 元数据 | 成功/失败语义、trial 与 layout 一致性、完整 episode 分组划分 |
+| 标定与单位 | SO-101 舵机顺序、前五轴角度、夹爪 `0～100`、标定快照哈希 |
+| 归一化 | 只使用 train episode、统计文件往返读取、训练集指纹校验、裁剪到 `[-1,1]` |
+| LeRobot 集成 | 使用真实 LeRobot writer 创建和重开数据集、RGB MP4 + 无损深度 TIFF 混合存储、8 步窗口、尾部重复和 padding mask |
+| OpenVLA 适配 | 规范 prompt、动作 token、`labels=-100` 掩码、RGB 转换、batch 右侧补齐 |
+| loss | padding 动作不影响 masked L1、有效动作变化会影响 loss、当前动作不可为 padding |
+| 训练工具 | warmup/cosine 学习率、移动平均、JSONL/CSV 指标和 PNG 曲线 |
+| 云端真实模型 | processor、7B 前向、LoRA 梯度及更新、200-step SFT、test 前向、checkpoint 恢复 |
+| MuJoCo 场景 | 两套场景加载、底板和纹理、SO101 模型、共享 AAA 电池、质量/坐标、动力学稳定性和 vendored 资产校验 |
+| T0 抓取 Demo | 六舵机选择与限幅、Viewer 快捷键副作用恢复、暂停/复位、双侧接触与抬升判定、headless 动力学检查 |
+| Basic T0 RL 环境 | Gymnasium 接口、snapshot 精确复用、30 Hz 调度、随机复位、圆柱投影入区、分阶段奖励和终止 |
+| PPO/GRPO baseline | Squashed Gaussian log probability、GAE bootstrap、组内轨迹优势、参数更新、固定评估、metrics 和 checkpoint 恢复 |
+
+视频编码后的 LeRobot 数据也在云端完成重新解码并进入适配器。当前 TorchCodec 与云端 PyTorch 版本不兼容，LeRobot 自动回退到 PyAV；MP4 写入、144 帧读取、训练和 checkpoint 恢复均已通过。后续可以固定兼容的 TorchCodec 版本以消除告警，但它没有阻断当前数据链路。
+
+### 4.8 下一步开发顺序
+
+1. 完成 leader/follower 舵机、机械臂校准和遥操作方向检查；固定全局 RGB-D，验证 RGB/depth 对齐、深度单位及时间同步，并记录机器人 ID、标定文件哈希和相机配置。
+2. 在已实现的项目真机录制入口上完成双相机同步和故意触发安全裁剪的专项验收。
+3. 采集约 10 条成功试验轨迹，覆盖至少两个任务和多个电池初始位置；检查视频、关节曲线、任务文本和时序。
+4. 将这批真实 LeRobotDataset 输入现有适配器，打印一个原始样本和一个模型 batch，核对图像方向、夹爪方向、动作范围及 episode 尾部 mask。
+5. 在云端先执行单 batch 前向和小数据过拟合；loss 能稳定下降后再扩充正式 SFT 数据集。
+6. 运行并审查现有 Basic T0 PPO/GRPO baseline 的学习曲线和策略行为，再实现 `sequence_p1_p2_p3` 任务环境并单独验收完整操作路径。
+7. 真机 SFT 基线能够低速闭环运行后，冻结共同 checkpoint，并行启动仅真机 RL 与真机 + 仿真混合 RL 两条实验路线。
+8. 分别生成两份 metrics，最后用同一套独立真机测试回合比较并选择最终比赛策略。

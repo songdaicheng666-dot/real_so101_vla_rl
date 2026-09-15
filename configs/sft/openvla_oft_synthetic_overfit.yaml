@@ -1,0 +1,68 @@
+schema_version: 2
+experiment_name: so101_synthetic_openvla_oft_overfit
+
+dataset:
+  repo_id: local/so101_synthetic_overfit_v2_lossless_depth
+  root: /root/autodl-tmp/datasets/so101_synthetic_overfit_v2_lossless_depth
+  revision: null
+  project_meta_dir: project_meta
+  fps: 30
+  image_keys:
+    - observation.images.overview
+    - observation.images.wrist
+  state_key: observation.state
+  action_key: action
+  action_source: robot_send_action_return
+  task_key: task
+  task_language: en
+  task_format: canonical_atomic_transfer_v1
+  successful_episodes_only: true
+  normalization:
+    method: bounds_q99
+    lower_quantile: 0.01
+    upper_quantile: 0.99
+    clip: true
+    stats_split: train
+    unnorm_key: so101_battery_dual_rgb_v2
+
+model:
+  checkpoint: openvla/openvla-7b
+  adapter: openvla_oft
+  action_head: continuous
+  loss: l1
+  action_dim: 6
+  proprio_dim: 6
+  action_chunk_size: 8
+  action_representation: absolute_joint_target
+  use_proprio: true
+  num_images: 2
+  image_size: 224
+
+lora:
+  enabled: true
+  rank: 32
+  alpha: 16
+  dropout: 0.0
+  target_modules: all-linear
+
+optimizer:
+  name: adamw
+  learning_rate: 0.0005
+  weight_decay: 0.0
+  scheduler: cosine
+  warmup_ratio: 0.03
+
+training:
+  seed: 42
+  max_steps: 200
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 1
+  num_workers: 0
+  logging_steps: 1
+  eval_steps: 20
+  save_steps: 100
+  save_total_limit: 2
+  bf16: true
+  gradient_checkpointing: true
+  image_augmentation: false
+  output_dir: /root/autodl-tmp/runs/so101_synthetic_overfit_v2_lossless_depth

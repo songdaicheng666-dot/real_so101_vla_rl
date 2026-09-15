@@ -13,6 +13,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+sim = [
+    "mujoco>=3.1.3,<4.0",
+    "Pillow>=10.0",
+]
+rl = [
+    "gymnasium>=1.0,<2.0",
+    "mujoco>=3.1.3,<4.0",
+    "numpy>=2.0,<3.0",
+    "Pillow>=10.0",
+    "torch>=2.2",
+]
+sft-data = [
+    "lerobot[dataset]==0.6.2",
+    "av>=15.0,<16.0",
+    "numpy>=2.0,<3.0",
+    "Pillow>=10.0",
+    "torch>=2.2",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.9",
@@ -20,6 +38,28 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+real_so101_vla_rl = [
+    "recording/*.md",
+    "assets/mujoco/*.md",
+    "assets/mujoco/*SHA256SUMS",
+    "assets/mujoco/SO101/*.md",
+    "assets/mujoco/SO101/*.xml",
+    "assets/mujoco/SO101/*.urdf",
+    "assets/mujoco/SO101/assets/*.stl",
+    "assets/mujoco/SO101/assets/*.part",
+    "assets/mujoco/SO101_menagerie/*.md",
+    "assets/mujoco/SO101_menagerie/LICENSE",
+    "assets/mujoco/SO101_menagerie/*.xml",
+    "assets/mujoco/SO101_menagerie/assets/*.stl",
+    "assets/mujoco/competition_2026/*.xml",
+    "assets/mujoco/competition_2026/*.yaml",
+    "assets/mujoco/competition_2026/*.md",
+    "assets/mujoco/competition_2026/source/*.pdf",
+    "assets/mujoco/competition_2026/textures/*.png",
+    "assets/mujoco/competition_2026/evidence/*.png",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

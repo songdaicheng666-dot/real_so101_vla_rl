@@ -15,3 +15,6 @@ __pycache__/
 .ruff_cache/
 build/
 dist/
+/artifacts/
+/runs/
+/so101-nexus

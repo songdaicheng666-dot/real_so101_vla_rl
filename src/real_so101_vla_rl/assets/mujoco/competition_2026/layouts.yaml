@@ -1,0 +1,119 @@
+schema_version: 1
+
+source:
+  file: source/challenge_task_board_2026.pdf
+  sha256: f537b63235542f3a509b6f695651a486232e65c02d21fc457a876f893eb277c6
+  original_size_m: [0.700, 0.540]
+
+coordinate_frame:
+  origin: robot_base_circle_center
+  x_positive: image_right
+  y_positive: away_from_robot
+  z_positive: up
+
+board:
+  size_m: [0.700, 0.550]
+  bounds_m:
+    x: [-0.392853, 0.307147]
+    y: [-0.100000, 0.450000]
+  texture_size_px: [2800, 2200]
+  pixels_per_meter: 4000
+  collision_thickness_m: 0.002
+
+style:
+  background_rgb: [255, 255, 255]
+  zone_fill_rgb: [237, 237, 236]
+  outline_rgb: [34, 24, 21]
+  inner_fill_rgb: [255, 255, 255]
+  outline_width_m: 0.0015
+  font: Noto Sans CJK SC
+  font_sizes_px:
+    source: 44
+    placeholder: 48
+    target: 48
+    base: 44
+  placeholder_colors_rgb:
+    A: [199, 45, 29]
+    B: [237, 206, 35]
+    C: [62, 157, 216]
+    D: [109, 186, 68]
+
+common:
+  robot_base:
+    center_m: [0.0000, 0.0000]
+    diameter_m: 0.2000
+    label: 机械臂底座
+  placeholder_size_m: [0.0700, 0.0800]
+  placeholder_centers_y_m:
+    top: 0.355914
+    bottom: 0.268202
+  aaa_batteries:
+    model_file: batteries_aaa.xml
+    diameter_m: 0.0105
+    total_length_m: 0.0445
+    mass_kg: 0.0115
+    initial_center_z_m: 0.00525
+    initial_axis: world_+y
+    slot_to_color:
+      A: red
+      B: yellow
+      C: blue
+      D: green
+    canonical_centers_m:
+      A: [-0.214698, 0.355914]
+      B: [-0.135543, 0.355914]
+      C: [-0.214698, 0.268202]
+      D: [-0.135543, 0.268202]
+
+scenes:
+  basic_t0:
+    texture: textures/basic_t0.png
+    battery_frame_offset_m: [0.000000, 0.000000, 0.000000]
+    source_region:
+      center_m: [-0.1751, 0.3250]
+      size_m: [0.3000, 0.2500]
+      corner_radius_m: 0.0150
+      label: 电池摆放区
+      label_center_m: [-0.1751, 0.4230]
+    placeholders:
+      A: {center_m: [-0.214698, 0.355914], label: 电池A}
+      B: {center_m: [-0.135543, 0.355914], label: 电池B}
+      C: {center_m: [-0.214698, 0.268202], label: 电池C}
+      D: {center_m: [-0.135543, 0.268202], label: 电池D}
+    target:
+      kind: rounded_rectangle
+      center_m: [0.1150, 0.3000]
+      size_m: [0.2000, 0.1000]
+      corner_radius_m: 0.0090
+      label: T0 基础摆放区
+
+  sequence_p1_p2_p3:
+    texture: textures/sequence_p1_p2_p3.png
+    battery_frame_offset_m: [-0.037866, 0.000000, 0.000000]
+    source_region:
+      center_m: [-0.2130, 0.3250]
+      size_m: [0.3000, 0.2500]
+      corner_radius_m: 0.0150
+      label: 电池摆放区
+      label_center_m: [-0.2130, 0.4230]
+    placeholders:
+      A: {center_m: [-0.252564, 0.355914], label: 电池A}
+      B: {center_m: [-0.173409, 0.355914], label: 电池B}
+      C: {center_m: [-0.252564, 0.268202], label: 电池C}
+      D: {center_m: [-0.173409, 0.268202], label: 电池D}
+    targets:
+      P1:
+        center_m: [0.0416, 0.3750]
+        outer_diameter_m: 0.1500
+        inner_diameter_m: 0.0800
+        label: P1内框
+      P2:
+        center_m: [0.2165, 0.3750]
+        outer_diameter_m: 0.1500
+        inner_diameter_m: 0.0800
+        label: P2内框
+      P3:
+        center_m: [0.2165, 0.1993]
+        outer_diameter_m: 0.1500
+        inner_diameter_m: 0.0800
+        label: P3内框

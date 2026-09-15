@@ -1,0 +1,35 @@
+dataset:
+  repo_id: local/so101_real_schema_v2
+  root: artifacts/datasets/so101_real_schema_v2
+  task: Pick up the blue battery and place it in T0.
+  layout_id: competition_2026_basic_t0
+  trial_id_prefix: real-basic-t0
+  num_episodes: 10
+  episode_time_s: 60
+  reset_time_s: 30
+  fps: 30
+  # Only the two RGB streams become MP4. Aligned depth always remains uint16 TIFF.
+  rgb_use_videos: true
+
+follower:
+  port: null
+  id: so101_follower
+  calibration_dir: null
+
+leader:
+  port: null
+  id: so101_leader
+  calibration_dir: null
+
+cameras:
+  # Hardware discovery/configuration will fill these values. Never assume /dev/video4.
+  orbbec_serial: null
+  wrist_device: null
+
+sync:
+  tolerance_ms: 25
+  timeout_ms: 200
+  max_consecutive_failures: 3
+
+# Set after the low-speed safety-clipping test; null preserves LeRobot's default.
+max_relative_target: null

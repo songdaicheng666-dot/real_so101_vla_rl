@@ -1,14 +1,17 @@
-schema_version: 1
+schema_version: 2
 experiment_name: so101_battery_openvla_oft_lora
 
 dataset:
-  # Fill one of these after the first dataset is recorded.
+  # Fill repo_id after the first dataset is recorded. root is optional when
+  # loading from the Hugging Face Hub or its default cache.
   repo_id: null
   root: null
+  revision: null  # null uses LeRobot's v3.0 dataset revision
   project_meta_dir: project_meta
   fps: 30
   image_keys:
-    - observation.images.front
+    - observation.images.overview
+    - observation.images.wrist
   state_key: observation.state
   action_key: action
   action_source: robot_send_action_return
@@ -22,7 +25,7 @@ dataset:
     upper_quantile: 0.99
     clip: true
     stats_split: train
-    unnorm_key: so101_battery_v1
+    unnorm_key: so101_battery_dual_rgb_v2
 
 model:
   checkpoint: openvla/openvla-7b
@@ -34,7 +37,7 @@ model:
   action_chunk_size: 8
   action_representation: absolute_joint_target
   use_proprio: true
-  num_images: 1
+  num_images: 2
   image_size: 224
 
 lora:
