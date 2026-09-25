@@ -12,7 +12,7 @@ from real_so101_vla_rl.data import (
     SENSOR_VALID_KEYS,
     WRIST_IMAGE_KEY,
     AtomicTask,
-    BatteryColor,
+    CubeColor,
     TargetSlot,
     TaskType,
     action_delta_timestamps,
@@ -31,7 +31,7 @@ def _valid_frame(*, timestamp_ns: int = 1_000_000_000) -> dict:
         OVERVIEW_DEPTH_KEY: np.zeros((480, 640, 1), dtype=np.uint16),
         "observation.state": np.arange(6, dtype=np.float32),
         "action": np.arange(6, dtype=np.float32),
-        "task": "Pick up the red battery and place it in T0.",
+        "task": "Pick up the red cube and place it in T0.",
         **{
             key: np.asarray([timestamp_ns + index], dtype=np.int64)
             for index, key in enumerate(SENSOR_TIMESTAMP_KEYS)
@@ -44,15 +44,17 @@ def _valid_frame(*, timestamp_ns: int = 1_000_000_000) -> dict:
 
 
 def test_atomic_task_generates_and_parses_canonical_instruction() -> None:
-    task = AtomicTask(TaskType.SEQUENCE_STEP, BatteryColor.BLUE, TargetSlot.P2, 2)
+    task = AtomicTask(TaskType.SEQUENCE_STEP, CubeColor.BLUE, TargetSlot.P2, 2)
 
-    assert task.instruction == "Pick up the blue battery and place it in P2."
+    assert task.instruction == "Pick up the blue cube and place it in P2."
     assert AtomicTask.from_instruction(task.instruction) == task
+    with pytest.raises(ValueError, match="canonical SO-101 instruction"):
+        AtomicTask.from_instruction("Pick up the blue battery and place it in P2.")
 
 
 def test_atomic_task_rejects_slot_step_mismatch() -> None:
     with pytest.raises(ValueError, match="requires sequence_step=2"):
-        AtomicTask(TaskType.SEQUENCE_STEP, BatteryColor.BLUE, TargetSlot.P2, 1)
+        AtomicTask(TaskType.SEQUENCE_STEP, CubeColor.BLUE, TargetSlot.P2, 1)
 
 
 def test_joint_mapping_uses_the_canonical_order() -> None:
@@ -108,7 +110,7 @@ def test_frame_schema_rejects_wrong_action_shape_and_noncanonical_task() -> None
         validate_frame(frame)
 
     frame = _valid_frame()
-    frame["task"] = "把红色电池放到 T0"
+    frame["task"] = "把红色方块放到 T0"
     with pytest.raises(ValueError, match="canonical SO-101 instruction"):
         validate_frame(frame)
 

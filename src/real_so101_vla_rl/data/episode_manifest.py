@@ -12,10 +12,11 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .schema import SCHEMA_VERSION, AtomicTask, BatteryColor, TargetSlot, TaskType
+from .schema import SCHEMA_VERSION, AtomicTask, CubeColor, TargetSlot, TaskType
 
 
 class FailureType(StrEnum):
+    STATIC_VALIDATION = "static_validation"
     WRONG_TARGET = "wrong_target"
     GRASP_FAILED = "grasp_failed"
     DROPPED = "dropped"
@@ -33,7 +34,7 @@ class EpisodeRecord:
     trial_id: str
     task_type: TaskType
     task: str
-    target_color: BatteryColor
+    target_color: CubeColor
     target_slot: TargetSlot
     sequence_step: int
     layout_id: str
@@ -121,7 +122,7 @@ class EpisodeRecord:
             trial_id=str(raw["trial_id"]),
             task_type=TaskType(raw["task_type"]),
             task=str(raw["task"]),
-            target_color=BatteryColor(raw["target_color"]),
+            target_color=CubeColor(raw["target_color"]),
             target_slot=TargetSlot(raw["target_slot"]),
             sequence_step=int(raw["sequence_step"]),
             layout_id=str(raw["layout_id"]),

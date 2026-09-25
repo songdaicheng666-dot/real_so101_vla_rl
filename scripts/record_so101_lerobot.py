@@ -6,6 +6,8 @@ import argparse
 import logging
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -19,19 +21,39 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="validate structure without requiring unresolved hardware identifiers",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="append to an interrupted dataset after validating its plan prefix",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    from real_so101_vla_rl.recording import load_recording_config
+    # Optional LeRobot imports can emit warnings and install a root handler.
+    # Configure logging first, and force our INFO level so operator prompts are
+    # never hidden by an import-time warning handler.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
+    from real_so101_vla_rl.recording import (
+        load_recording_config,
+        validate_recording_root_mode,
+    )
 
     config = load_recording_config(
         args.config, require_hardware_ready=not args.check_config
     )
     if args.check_config:
-        print(f"Schema-v2 recording config is structurally valid: {args.config}")
+        print(
+            f"Schema-v2 recording config is structurally valid: {args.config}; "
+            f"camera_rig={config.cameras.rig.profile.rig_id}"
+        )
         return
+    validate_recording_root_mode(config, resume=args.resume)
 
     try:
         from lerobot.configs.video import RGBEncoderConfig
@@ -50,19 +72,38 @@ def main() -> None:
     from real_so101_vla_rl.hardware import (
         SO101ObservationSynchronizer,
         SO101StateAdapter,
+        connect_calibrated_so101_follower,
+        connect_calibrated_so101_leader,
     )
     from real_so101_vla_rl.hardware.cameras import (
         OpenCVRGBAdapter,
         OrbbecRGBDAdapter,
+        probe_camera_rig,
+        require_valid_camera_probe,
+    )
+    from real_so101_vla_rl.recording.camera_metadata import (
+        write_camera_setup_metadata,
+    )
+    from real_so101_vla_rl.recording.dataset_lifecycle import (
+        validate_resumed_recording_dataset,
+        write_recording_robot_profile,
     )
     from real_so101_vla_rl.recording.lerobot_v2 import (
         RecordingControls,
         run_recording_session,
     )
 
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    camera_probe = probe_camera_rig(
+        config.cameras.rig,
+        check_streams=True,
+        duration_s=10.0,
+        timeout_ms=max(2000, config.sync.timeout_ms),
+        timestamp_tolerance_ms=config.sync.tolerance_ms,
     )
+    if not camera_probe.valid:
+        logger.error("Camera preflight report:\n%s", camera_probe.to_json())
+    require_valid_camera_probe(camera_probe)
+    logger.info("Camera preflight passed:\n%s", camera_probe.to_json())
     follower = SO101Follower(
         SO101FollowerConfig(
             port=config.follower.port,
@@ -93,12 +134,12 @@ def main() -> None:
         follower,
         max_consecutive_failures=config.sync.max_consecutive_failures,
     )
-    overview_adapter = OrbbecRGBDAdapter.from_sdk(
-        serial_number=config.cameras.orbbec_serial,
+    overview_adapter = OrbbecRGBDAdapter.from_profile(
+        config.cameras.rig,
         max_consecutive_failures=config.sync.max_consecutive_failures,
     )
-    wrist_adapter = OpenCVRGBAdapter.from_device(
-        config.cameras.wrist_device,
+    wrist_adapter = OpenCVRGBAdapter.from_profile(
+        config.cameras.rig,
         max_consecutive_failures=config.sync.max_consecutive_failures,
     )
     synchronizer = SO101ObservationSynchronizer(
@@ -112,7 +153,7 @@ def main() -> None:
     listener = create_key_listener(
         controls.dispatch,
         controls_help=(
-            "Right/n=end, Enter/s=save, Left/r=discard, Esc/q=stop"
+            "Enter/s=ready or save, Right/n=end, Left/r=discard, Esc/q=stop"
         ),
     )
     if listener is None:
@@ -120,24 +161,49 @@ def main() -> None:
 
     dataset = None
     try:
-        leader.connect()
-        follower.connect()
+        connect_calibrated_so101_leader(leader)
+        follower_connection = connect_calibrated_so101_follower(follower)
+        logger.info(
+            "Follower connected with current-position hold: %s",
+            follower_connection.present_position_raw,
+        )
         synchronizer.connect()
         features = build_so101_lerobot_features(
             rgb_use_videos=config.dataset.rgb_use_videos
         )
-        create_kwargs = {
+        common_writer_kwargs = {
             "repo_id": config.dataset.repo_id,
-            "fps": config.dataset.fps,
             "root": Path(config.dataset.root),
-            "robot_type": "so101_follower",
-            "features": features,
-            "use_videos": config.dataset.rgb_use_videos,
             "image_writer_threads": 12,
             # DatasetWriter validates its encoder configs even for image-backed data.
             "rgb_encoder": RGBEncoderConfig(vcodec="h264"),
         }
-        dataset = LeRobotDataset.create(**create_kwargs)
+        if args.resume:
+            dataset = LeRobotDataset.resume(**common_writer_kwargs)
+            try:
+                validate_resumed_recording_dataset(config, dataset)
+            except BaseException:
+                dataset.finalize()
+                raise
+            logger.info(
+                "Resuming accepted episode %d of %d",
+                dataset.num_episodes + 1,
+                config.dataset.num_episodes,
+            )
+        else:
+            dataset = LeRobotDataset.create(
+                **common_writer_kwargs,
+                fps=config.dataset.fps,
+                robot_type="so101_follower",
+                features=features,
+                use_videos=config.dataset.rgb_use_videos,
+            )
+        write_camera_setup_metadata(
+            config.dataset.root,
+            config.cameras.rig,
+            camera_probe,
+        )
+        write_recording_robot_profile(config, follower)
         teleop_processor, robot_processor, _ = make_default_processors()
         with VideoEncodingManager(dataset):
             summaries = run_recording_session(

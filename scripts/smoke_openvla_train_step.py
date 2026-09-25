@@ -110,7 +110,7 @@ def main() -> None:
             "action_is_pad": torch.tensor(
                 [False] * (NUM_ACTIONS_CHUNK - 2) + [True, True]
             ),
-            "task": "Pick up the red battery and place it in T0.",
+            "task": "Pick up the red cube and place it in T0.",
             **{key: torch.tensor([True]) for key in SENSOR_VALID_KEYS},
         }
     )

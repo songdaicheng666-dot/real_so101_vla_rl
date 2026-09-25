@@ -55,7 +55,7 @@ def synthetic_normalization_stats() -> NormalizationStats:
     return compute_normalization_stats(
         samples,
         train_episode_indices=[0],
-        unnorm_key="so101_battery_dual_rgb_v2",
+        unnorm_key="so101_cube_dual_rgb_v2",
     )
 
 
@@ -90,7 +90,7 @@ def main() -> None:
             "observation.state": torch.zeros(6, dtype=torch.float32),
             "action": torch.zeros((8, 6), dtype=torch.float32),
             "action_is_pad": torch.zeros(8, dtype=torch.bool),
-            "task": "Pick up the red battery and place it in T0.",
+            "task": "Pick up the red cube and place it in T0.",
             **{key: torch.tensor([True]) for key in SENSOR_VALID_KEYS},
         }
     )

@@ -57,3 +57,38 @@ config = load_sft_config(
 ```
 
 把 `require_training_ready` 改为 `True` 后，任何尚未填写的运行参数都会触发明确错误。
+
+## 低照度 pilot
+
+`openvla_oft_real_pilot_lowlight.yaml` 对应独立数据集
+`so101_real_pilot_lowlight_v2`，使用 `pilot_single_task_grouped_v1` 策略。
+20 个唯一布局按 seed 42 确定性分成 16/2/2 个 train/val/test episode；
+训练配置为 batch size 2、200 optimizer steps、每步记录、每 20 steps 验证、
+每 100 steps 保存，并保留两个 checkpoint。该配置关闭图像增强，仅用于验证
+真实录制到 SFT metrics/checkpoint 的完整链路。
+
+云端将完整数据集放在
+`/root/autodl-tmp/datasets/so101_real_pilot_lowlight_v2` 后，依次执行：
+
+```bash
+python scripts/train_openvla_oft_sft.py \
+  --config configs/sft/openvla_oft_real_pilot_lowlight.yaml \
+  --cache-dir /root/autodl-tmp/huggingface \
+  --local-files-only \
+  --preflight-only
+
+python scripts/train_openvla_oft_sft.py \
+  --config configs/sft/openvla_oft_real_pilot_lowlight.yaml \
+  --cache-dir /root/autodl-tmp/huggingface \
+  --local-files-only
+
+python scripts/train_openvla_oft_sft.py \
+  --config configs/sft/openvla_oft_real_pilot_lowlight.yaml \
+  --cache-dir /root/autodl-tmp/huggingface \
+  --local-files-only \
+  --preflight-only \
+  --checkpoint /root/autodl-tmp/runs/so101_real_pilot_lowlight_v2/checkpoint-000200
+```
+
+训练加载器会核对 `splits.json` 中的策略；pilot 数据不能被误用为正式的
+`full_task_layout_v1` 数据集。

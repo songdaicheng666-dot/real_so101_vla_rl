@@ -172,7 +172,11 @@ def load_project_dataset_metadata(
     paths = _project_metadata_paths(root, config.dataset.project_meta_dir)
     episodes = load_episode_manifest(paths["episodes"])
     splits = load_dataset_splits(paths["splits"])
-    validate_dataset_splits(splits, episodes)
+    validate_dataset_splits(
+        splits,
+        episodes,
+        expected_policy=config.dataset.split_policy,
+    )
     normalization = load_normalization_stats(paths["normalization"])
     robot_profile = load_robot_profile(paths["robot_profile"])
 

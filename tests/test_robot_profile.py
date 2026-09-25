@@ -83,5 +83,20 @@ def test_profile_uses_actual_lerobot_calibration_units(tmp_path) -> None:
     assert (metadata_dir / "calibration.json").read_bytes() == calibration_bytes
     assert load_robot_profile(metadata_dir / "robot_profile.json") == profile
 
+    # An identical snapshot is idempotent, while a different calibration cannot
+    # silently replace provenance in an existing dataset.
+    write_robot_profile(metadata_dir, profile, calibration_bytes)
+    changed = calibration_bytes.replace(b"-1860", b"-1861")
+    changed_path = tmp_path / "changed_follower.json"
+    changed_path.write_bytes(changed)
+    changed_profile, changed_bytes = build_robot_profile(
+        changed_path,
+        robot_id="my_follower_arm",
+        camera_setup_id="dual_rgbd_camera_v2",
+        lerobot_commit="abc123",
+    )
+    with pytest.raises(RuntimeError, match="calibration differs"):
+        write_robot_profile(metadata_dir, changed_profile, changed_bytes)
+
     with pytest.raises(ValueError, match="schema_version=1"):
         replace(profile, schema_version=1)

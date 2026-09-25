@@ -15,6 +15,7 @@ from .schema import DEFAULT_FPS, JOINT_NAMES, JOINT_UNITS, SCHEMA_VERSION
 MOTOR_NAMES = tuple(name.removesuffix(".pos") for name in JOINT_NAMES)
 MOTOR_IDS = dict(zip(MOTOR_NAMES, range(1, 7), strict=True))
 STS3215_RESOLUTION = 4096
+LEROBOT_COMMIT = "4aaff99be4a1d81568c08c8f0296b41b40c99ec4"
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,11 +192,21 @@ def write_robot_profile(
     if calibration_sha256(calibration_bytes) != profile.calibration_sha256:
         raise ValueError("Calibration bytes do not match robot profile calibration_sha256")
     project_meta_dir = Path(project_meta_dir)
-    _atomic_write(project_meta_dir / profile.calibration_file, calibration_bytes)
     profile_bytes = json.dumps(
         profile.to_dict(), ensure_ascii=False, indent=2, sort_keys=True
     ).encode("utf-8") + b"\n"
-    _atomic_write(project_meta_dir / "robot_profile.json", profile_bytes)
+    calibration_path = project_meta_dir / profile.calibration_file
+    profile_path = project_meta_dir / "robot_profile.json"
+    if calibration_path.exists() and calibration_path.read_bytes() != calibration_bytes:
+        raise RuntimeError(
+            "Dataset follower calibration differs; refusing mixed-calibration recording"
+        )
+    if profile_path.exists() and profile_path.read_bytes() != profile_bytes:
+        raise RuntimeError("Dataset robot profile differs; refusing mixed-robot recording")
+    if not calibration_path.exists():
+        _atomic_write(calibration_path, calibration_bytes)
+    if not profile_path.exists():
+        _atomic_write(profile_path, profile_bytes)
 
 
 def load_robot_profile(path: str | Path) -> RobotProfile:

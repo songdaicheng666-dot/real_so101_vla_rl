@@ -1,30 +1,28 @@
 dataset:
-  repo_id: local/so101_real_schema_v2
-  root: artifacts/datasets/so101_real_schema_v2
+  repo_id: local/so101_static_validation_v2
+  root: artifacts/datasets/so101_static_validation_v2
   task: Pick up the blue cube and place it in T0.
   layout_id: competition_2026_basic_t0
-  trial_id_prefix: real-basic-t0
+  trial_id_prefix: static-validation-basic-t0
   num_episodes: 10
-  episode_time_s: 60
-  reset_time_s: 30
+  episode_time_s: 8
+  reset_time_s: 0
   fps: 30
-  # Only the two RGB streams become MP4. Aligned depth always remains uint16 TIFF.
   rgb_use_videos: true
+  purpose: static_validation
+  manual_confirmation: false
 
 follower:
-  # Stable USB identity verified against my_follower_arm.json on 2026-09-19.
   port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79050068-if00
   id: my_follower_arm
   calibration_dir: null
 
 leader:
-  # Stable USB identity verified with only the leader connected on 2026-09-19.
   port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79049969-if00
   id: my_leader_arm
   calibration_dir: null
 
 cameras:
-  # Resolve relative to this recording YAML; the profile owns all stable identities.
   profile: ../hardware/cameras/so101_competition_2026.yaml
 
 sync:
@@ -32,5 +30,4 @@ sync:
   timeout_ms: 200
   max_consecutive_failures: 3
 
-# Set after the low-speed safety-clipping test; null preserves LeRobot's default.
 max_relative_target: null

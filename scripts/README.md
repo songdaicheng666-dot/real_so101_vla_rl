@@ -9,8 +9,9 @@ observations, and records the action returned by `robot.send_action()`.
 The two RGB streams are optionally encoded as MP4, while aligned millimetre
 depth always remains lossless per-frame uint16 TIFF.
 
-The checked-in configuration intentionally has unresolved hardware identifiers.
-Its non-hardware structure can already be checked with:
+The checked-in recording config references a strict reusable camera profile and
+stable leader/follower `/dev/serial/by-id` identities. Its static structure can
+be checked with:
 
 ```bash
 conda run --no-capture-output -n lerobot \
@@ -19,10 +20,48 @@ conda run --no-capture-output -n lerobot \
   --check-config
 ```
 
-After the hardware identity and calibration step fills the follower/leader
-ports, Orbbec serial and wrist selector, omit `--check-config` to record. Only
-episodes explicitly accepted with `Enter`/`s` are saved. See
+Probe the frozen dual-camera identity and streams independently with:
+
+```bash
+conda run --no-capture-output -n lerobot \
+  python scripts/probe_so101_cameras.py \
+  --check-streams \
+  --duration-s 1 \
+  --report Log/hardware/camera_probe.json
+```
+
+After passing camera preflight, omit `--check-config` to record. Demonstration
+episodes are saved only after explicit `Enter`/`s` confirmation. A separate
+`configs/recording/so101_static_validation_v2.yaml` diagnostic config records
+ten automatic eight-second static episodes, marks them `static_validation`, and
+therefore prevents them from entering successful SFT splits. See
 `configs/recording/README.md` for controls and rejection behavior.
+
+The low-light pilot uses
+`configs/recording/so101_real_pilot_lowlight_v2.yaml`. Each attempt has a
+layout-setup prompt, and only a confirmed save advances its unique layout ID.
+If a partial dataset already exists, pass `--resume`; without that explicit flag
+the recorder refuses to touch a nonempty root. Resume verifies the LeRobot
+episode count, project manifest, task, and planned layout prefix, and is refused
+after split/normalization metadata has been generated.
+
+`finalize_so101_dataset.py` validates the real dataset against both its recording
+and SFT configs. `--validate-only` supports the two-episode inspection gate and
+writes nothing. A full run requires all 20 successful episodes, checks every
+tabular frame plus each episode's first/last media, computes q01/q99 only from
+the train split, and atomically writes deterministic final metadata:
+
+```bash
+conda run --no-capture-output -n lerobot \
+  python scripts/finalize_so101_dataset.py --validate-only
+
+conda run --no-capture-output -n lerobot \
+  python scripts/finalize_so101_dataset.py
+```
+
+The real recording task uses colored cubes and the canonical English instruction
+`Pick up the <color> cube and place it in <slot>.` The MuJoCo grasp demo below
+still uses its existing AAA battery assets and is documented separately.
 
 ## MuJoCo Basic T0 PPO/GRPO training
 

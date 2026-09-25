@@ -68,7 +68,7 @@ def test_real_lerobot_dataset_returns_episode_safe_action_window(
                 ),
                 "observation.state": np.full(6, frame_index, dtype=np.float32),
                 "action": np.full(6, frame_index, dtype=np.float32),
-                "task": "Pick up the red battery and place it in T0.",
+                "task": "Pick up the red cube and place it in T0.",
                 **{
                     key: np.asarray([frame_index * 1_000_000 + index], dtype=np.int64)
                     for index, key in enumerate(SENSOR_TIMESTAMP_KEYS)
@@ -115,7 +115,7 @@ def test_real_lerobot_dataset_returns_episode_safe_action_window(
         True,
     ]
     assert sample["action"][-1].tolist() == pytest.approx([2.0] * 6)
-    assert sample["task"] == "Pick up the red battery and place it in T0."
+    assert sample["task"] == "Pick up the red cube and place it in T0."
     assert set(dataset.meta.video_keys) == {
         OVERVIEW_IMAGE_KEY,
         WRIST_IMAGE_KEY,

@@ -7,11 +7,19 @@ import random
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 from pathlib import Path
 
 from .episode_manifest import EpisodeRecord, validate_episode_manifest
 from .robot_profile import _atomic_write
-from .schema import SCHEMA_VERSION, BatteryColor, TargetSlot
+from .schema import SCHEMA_VERSION, CubeColor, TargetSlot
+
+
+class SplitPolicy(StrEnum):
+    """Episode split contracts supported by the project."""
+
+    FULL_TASK_LAYOUT_V1 = "full_task_layout_v1"
+    PILOT_SINGLE_TASK_GROUPED_V1 = "pilot_single_task_grouped_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +30,7 @@ class DatasetSplits:
     train: tuple[int, ...]
     val: tuple[int, ...]
     test: tuple[int, ...]
+    policy: SplitPolicy = SplitPolicy.FULL_TASK_LAYOUT_V1
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -29,6 +38,9 @@ class DatasetSplits:
     @classmethod
     def from_dict(cls, raw: dict) -> DatasetSplits:
         raw = dict(raw)
+        raw["policy"] = SplitPolicy(
+            raw.get("policy", SplitPolicy.FULL_TASK_LAYOUT_V1)
+        )
         for key in ("group_by", "train", "val", "test"):
             raw[key] = tuple(raw[key])
         return cls(**raw)
@@ -47,7 +59,7 @@ def _split_group_counts(group_count: int, val_ratio: float, test_ratio: float) -
 def _training_has_full_coverage(train_records: Iterable[EpisodeRecord]) -> bool:
     train_records = tuple(train_records)
     return (
-        {record.target_color for record in train_records} == set(BatteryColor)
+        {record.target_color for record in train_records} == set(CubeColor)
         and {record.target_slot for record in train_records} == set(TargetSlot)
     )
 
@@ -58,9 +70,11 @@ def generate_dataset_splits(
     seed: int = 42,
     val_ratio: float = 0.1,
     test_ratio: float = 0.1,
+    policy: SplitPolicy = SplitPolicy.FULL_TASK_LAYOUT_V1,
 ) -> DatasetSplits:
     """Split successful episodes while keeping each layout in one partition."""
 
+    policy = SplitPolicy(policy)
     records = validate_episode_manifest(records)
     successful = tuple(record for record in records if record.success)
     if not successful:
@@ -73,6 +87,12 @@ def generate_dataset_splits(
         layouts[record.layout_id].append(record)
     val_count, test_count = _split_group_counts(len(layouts), val_ratio, test_ratio)
 
+    if (
+        policy is SplitPolicy.PILOT_SINGLE_TASK_GROUPED_V1
+        and len({record.task for record in successful}) != 1
+    ):
+        raise ValueError("The pilot split policy requires exactly one canonical task")
+
     layout_ids = sorted(layouts)
     chosen = None
     # Try deterministic shuffles until training retains all required colors and slots.
@@ -83,7 +103,10 @@ def generate_dataset_splits(
         val_layouts = set(shuffled[test_count : test_count + val_count])
         train_layouts = set(shuffled[test_count + val_count :])
         train_records = [record for layout in train_layouts for record in layouts[layout]]
-        if _training_has_full_coverage(train_records):
+        if (
+            policy is SplitPolicy.PILOT_SINGLE_TASK_GROUPED_V1
+            or _training_has_full_coverage(train_records)
+        ):
             chosen = train_layouts, val_layouts, test_layouts
             break
     if chosen is None:
@@ -103,15 +126,25 @@ def generate_dataset_splits(
         train=indices(train_layouts),
         val=indices(val_layouts),
         test=indices(test_layouts),
+        policy=policy,
     )
     validate_dataset_splits(splits, records)
     return splits
 
 
 def validate_dataset_splits(
-    splits: DatasetSplits, records: Iterable[EpisodeRecord]
+    splits: DatasetSplits,
+    records: Iterable[EpisodeRecord],
+    *,
+    expected_policy: SplitPolicy | None = None,
 ) -> DatasetSplits:
     records = validate_episode_manifest(records)
+    policy = SplitPolicy(splits.policy)
+    if expected_policy is not None and policy is not SplitPolicy(expected_policy):
+        raise ValueError(
+            "Dataset split policy mismatch: "
+            f"expected {SplitPolicy(expected_policy).value!r}, got {policy.value!r}"
+        )
     if splits.schema_version != SCHEMA_VERSION:
         raise ValueError(f"Unsupported split schema_version={splits.schema_version}")
     if splits.group_by != ("layout_id",):
@@ -140,8 +173,26 @@ def validate_dataset_splits(
             if previous != partition:
                 raise ValueError(f"layout_id={layout_id!r} occurs in both {previous} and {partition}")
 
-    if not _training_has_full_coverage(successful[index] for index in splits.train):
-        raise ValueError("Training split must cover all four colors and T0/P1/P2/P3")
+    if policy is SplitPolicy.FULL_TASK_LAYOUT_V1:
+        if not _training_has_full_coverage(
+            successful[index] for index in splits.train
+        ):
+            raise ValueError(
+                "Training split must cover all four colors and T0/P1/P2/P3"
+            )
+    elif policy is SplitPolicy.PILOT_SINGLE_TASK_GROUPED_V1:
+        if any(not episode_indices for episode_indices in split_sets.values()):
+            raise ValueError("Pilot train/val/test splits must all contain episodes")
+        if len({record.task for record in successful.values()}) != 1:
+            raise ValueError(
+                "The pilot split policy requires exactly one canonical task"
+            )
+        if len({record.layout_id for record in successful.values()}) < 3:
+            raise ValueError(
+                "The pilot split policy requires at least three distinct layouts"
+            )
+    else:  # pragma: no cover - StrEnum construction rejects this first
+        raise ValueError(f"Unsupported split policy: {policy!r}")
     return splits
 
 

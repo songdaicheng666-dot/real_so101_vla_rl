@@ -1,0 +1,56 @@
+dataset:
+  repo_id: local/so101_real_pilot_lowlight_v2
+  root: artifacts/datasets/so101_real_pilot_lowlight_v2
+  task: Pick up the blue cube and place it in T0.
+  layout_id: null
+  layout_ids:
+    - pilot-lowlight-blue-t0-pose-001
+    - pilot-lowlight-blue-t0-pose-002
+    - pilot-lowlight-blue-t0-pose-003
+    - pilot-lowlight-blue-t0-pose-004
+    - pilot-lowlight-blue-t0-pose-005
+    - pilot-lowlight-blue-t0-pose-006
+    - pilot-lowlight-blue-t0-pose-007
+    - pilot-lowlight-blue-t0-pose-008
+    - pilot-lowlight-blue-t0-pose-009
+    - pilot-lowlight-blue-t0-pose-010
+    - pilot-lowlight-blue-t0-pose-011
+    - pilot-lowlight-blue-t0-pose-012
+    - pilot-lowlight-blue-t0-pose-013
+    - pilot-lowlight-blue-t0-pose-014
+    - pilot-lowlight-blue-t0-pose-015
+    - pilot-lowlight-blue-t0-pose-016
+    - pilot-lowlight-blue-t0-pose-017
+    - pilot-lowlight-blue-t0-pose-018
+    - pilot-lowlight-blue-t0-pose-019
+    - pilot-lowlight-blue-t0-pose-020
+  split_policy: pilot_single_task_grouped_v1
+  normalization_key: so101_cube_dual_rgb_v2
+  trial_id_prefix: real-pilot-lowlight-blue-t0
+  num_episodes: 20
+  episode_time_s: 60
+  reset_time_s: 30
+  fps: 30
+  rgb_use_videos: true
+  purpose: demonstration
+  manual_confirmation: true
+
+follower:
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79050068-if00
+  id: my_follower_arm
+  calibration_dir: null
+
+leader:
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79049969-if00
+  id: my_leader_arm
+  calibration_dir: null
+
+cameras:
+  profile: ../hardware/cameras/so101_competition_2026_exposure150.yaml
+
+sync:
+  tolerance_ms: 25
+  timeout_ms: 200
+  max_consecutive_failures: 3
+
+max_relative_target: null

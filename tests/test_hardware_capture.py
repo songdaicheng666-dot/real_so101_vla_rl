@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from threading import Event, Lock
 from typing import Any
 
 import numpy as np
@@ -18,6 +20,7 @@ from real_so101_vla_rl.hardware import (
 from real_so101_vla_rl.hardware.cameras import (
     OpenCVRGBAdapter,
     OrbbecRGBDAdapter,
+    load_camera_rig_profile,
 )
 from real_so101_vla_rl.hardware.cameras.orbbec_rgbd import (
     decode_orbbec_depth_mm,
@@ -178,6 +181,45 @@ class _FailingOpenCVCamera(_OpenCVCamera):
         raise TimeoutError("wrist timeout")
 
 
+class _TimestampedOpenCVCamera(_OpenCVCamera):
+    def __init__(self, frame: np.ndarray) -> None:
+        super().__init__(frame)
+        self.frame_lock = Lock()
+        self.new_frame_event = Event()
+        self.new_frame_event.set()
+        self.latest_frame = frame
+        self.latest_timestamp = 10.5
+
+
+class _FakeVideoCapture:
+    def __init__(self) -> None:
+        import cv2
+
+        fourcc = sum(ord(character) << (8 * index) for index, character in enumerate("MJPG"))
+        self.values = {
+            cv2.CAP_PROP_FRAME_WIDTH: 640.0,
+            cv2.CAP_PROP_FRAME_HEIGHT: 480.0,
+            cv2.CAP_PROP_FPS: 30.0,
+            cv2.CAP_PROP_FOURCC: float(fourcc),
+            cv2.CAP_PROP_AUTO_EXPOSURE: 3.0,
+            cv2.CAP_PROP_EXPOSURE: 0.0,
+            cv2.CAP_PROP_GAIN: 1.0,
+        }
+
+    def set(self, property_id: int, value: float) -> bool:
+        self.values[property_id] = value
+        return True
+
+    def get(self, property_id: int) -> float:
+        return self.values[property_id]
+
+
+class _ProfiledOpenCVCamera(_OpenCVCamera):
+    def __init__(self, frame: np.ndarray) -> None:
+        super().__init__(frame)
+        self.videocapture = _FakeVideoCapture()
+
+
 def test_opencv_adapter_converts_bgr_to_rgb() -> None:
     bgr = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3), dtype=np.uint8)
     bgr[0, 0] = (1, 2, 3)
@@ -187,6 +229,37 @@ def test_opencv_adapter_converts_bgr_to_rgb() -> None:
     assert sample.valid
     assert sample.timestamp_ns == 99
     np.testing.assert_array_equal(sample.value[0, 0], (3, 2, 1))
+
+
+def test_opencv_adapter_applies_and_verifies_frozen_manual_exposure() -> None:
+    import cv2
+
+    bgr = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3), dtype=np.uint8)
+    camera = _ProfiledOpenCVCamera(bgr)
+    profile = load_camera_rig_profile(
+        Path("configs/hardware/cameras/so101_competition_2026.yaml")
+    ).profile.wrist
+    adapter = OpenCVRGBAdapter(camera, expected_profile=profile)
+
+    adapter.connect()
+
+    assert camera.videocapture.get(cv2.CAP_PROP_AUTO_EXPOSURE) == 1.0
+    assert camera.videocapture.get(cv2.CAP_PROP_EXPOSURE) == 300.0
+    assert camera.videocapture.get(cv2.CAP_PROP_GAIN) == 0.0
+
+
+def test_opencv_adapter_uses_background_hardware_completion_timestamp() -> None:
+    bgr = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3), dtype=np.uint8)
+    adapter = OpenCVRGBAdapter(
+        _TimestampedOpenCVCamera(bgr),
+        clock_ns=lambda: 20_000_000_000,
+        perf_counter_ns=lambda: 10_000_000_000,
+    )
+
+    sample = adapter.read(200)
+
+    assert sample.valid
+    assert sample.timestamp_ns == 20_500_000_000
 
 
 def test_opencv_adapter_is_broken_after_three_consecutive_failures() -> None:
@@ -245,6 +318,26 @@ class _SingleAdapter:
         self.is_connected = False
 
 
+@dataclass
+class _SequenceAdapter:
+    samples: list[Any]
+    is_broken: bool = False
+    is_connected: bool = False
+    read_count: int = 0
+
+    def connect(self) -> None:
+        self.is_connected = True
+
+    def read(self, timeout_ms: int) -> Any:
+        assert timeout_ms == 200
+        sample = self.samples[min(self.read_count, len(self.samples) - 1)]
+        self.read_count += 1
+        return sample
+
+    def disconnect(self) -> None:
+        self.is_connected = False
+
+
 def _sync_inputs(*, span_ns: int = 25_000_000, sequence_id: int = 0):
     overview = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3), dtype=np.uint8)
     depth = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 1), dtype=np.uint16)
@@ -280,6 +373,49 @@ def test_synchronizer_accepts_boundary_and_emits_schema_fields() -> None:
         100,
         101,
     ]
+    synchronizer.disconnect()
+
+
+def test_synchronizer_realigns_camera_phase_with_nearest_buffered_frame() -> None:
+    overview = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3), dtype=np.uint8)
+    depth = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 1), dtype=np.uint16)
+    wrist = np.ones_like(overview)
+    state = np.arange(6, dtype=np.float32)
+
+    def rgbd(timestamp_ns: int, sequence_id: int) -> RGBDFrame:
+        return RGBDFrame(
+            CapturedSample.success(
+                overview, timestamp_ns=timestamp_ns, sequence_id=sequence_id
+            ),
+            CapturedSample.success(
+                depth, timestamp_ns=timestamp_ns, sequence_id=sequence_id
+            ),
+        )
+
+    overview_adapter = _SequenceAdapter(
+        [rgbd(0, 0), rgbd(33_000_000, 1)]
+    )
+    wrist_adapter = _SequenceAdapter(
+        [CapturedSample.success(wrist, timestamp_ns=34_000_000, sequence_id=0)]
+    )
+    state_adapter = _SequenceAdapter(
+        [CapturedSample.success(state, timestamp_ns=35_000_000, sequence_id=0)]
+    )
+    synchronizer = SO101ObservationSynchronizer(
+        overview_adapter,
+        wrist_adapter,
+        state_adapter,
+        tolerance_ms=25,
+    )
+
+    synchronizer.connect()
+    result = synchronizer.capture()
+
+    assert result.valid
+    assert result.diagnostics.span_ns == 2_000_000
+    assert result.observation.overview_timestamp_ns == 33_000_000
+    assert result.observation.wrist_timestamp_ns == 34_000_000
+    assert overview_adapter.read_count == 2
     synchronizer.disconnect()
 
 

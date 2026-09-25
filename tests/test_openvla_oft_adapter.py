@@ -41,11 +41,15 @@ from real_so101_vla_rl.data.schema import (
     SENSOR_VALID_KEYS,
     WRIST_IMAGE_KEY,
     AtomicTask,
-    BatteryColor,
+    CubeColor,
     TargetSlot,
     TaskType,
 )
-from real_so101_vla_rl.data.splits import DatasetSplits, write_dataset_splits
+from real_so101_vla_rl.data.splits import (
+    DatasetSplits,
+    SplitPolicy,
+    write_dataset_splits,
+)
 from real_so101_vla_rl.models import load_sft_config
 from real_so101_vla_rl.models.losses import masked_action_l1
 
@@ -54,10 +58,10 @@ CONFIG_PATH = Path(__file__).parents[1] / "configs" / "sft" / "openvla_oft_lora.
 
 def _episode_records() -> tuple[EpisodeRecord, ...]:
     tasks = (
-        AtomicTask(TaskType.SINGLE_T0, BatteryColor.RED, TargetSlot.T0, 0),
-        AtomicTask(TaskType.SEQUENCE_STEP, BatteryColor.BLUE, TargetSlot.P1, 1),
-        AtomicTask(TaskType.SEQUENCE_STEP, BatteryColor.YELLOW, TargetSlot.P2, 2),
-        AtomicTask(TaskType.SEQUENCE_STEP, BatteryColor.GREEN, TargetSlot.P3, 3),
+        AtomicTask(TaskType.SINGLE_T0, CubeColor.RED, TargetSlot.T0, 0),
+        AtomicTask(TaskType.SEQUENCE_STEP, CubeColor.BLUE, TargetSlot.P1, 1),
+        AtomicTask(TaskType.SEQUENCE_STEP, CubeColor.YELLOW, TargetSlot.P2, 2),
+        AtomicTask(TaskType.SEQUENCE_STEP, CubeColor.GREEN, TargetSlot.P3, 3),
     )
     return tuple(
         EpisodeRecord.from_task(
@@ -106,7 +110,7 @@ def _write_project_metadata(root: Path) -> None:
         NormalizationStats(
             schema_version=SCHEMA_VERSION,
             method="bounds_q99",
-            unnorm_key="so101_battery_dual_rgb_v2",
+            unnorm_key="so101_cube_dual_rgb_v2",
             train_episode_sha256=digest,
             train_episode_count=count,
             observation_state=stats,
@@ -140,7 +144,7 @@ def _write_project_metadata(root: Path) -> None:
     write_robot_profile(metadata_root, profile, calibration_bytes)
 
 
-def _raw_sample(task: str = "Pick up the red battery and place it in T0.") -> dict:
+def _raw_sample(task: str = "Pick up the red cube and place it in T0.") -> dict:
     actions = torch.stack(
         [torch.linspace(0, 100, 6, dtype=torch.float32) + offset for offset in range(8)]
     )
@@ -280,7 +284,7 @@ def _normalization() -> NormalizationStats:
     return NormalizationStats(
         schema_version=SCHEMA_VERSION,
         method="bounds_q99",
-        unnorm_key="so101_battery_dual_rgb_v2",
+        unnorm_key="so101_cube_dual_rgb_v2",
         train_episode_sha256=digest,
         train_episode_count=count,
         observation_state=stats,
@@ -318,7 +322,7 @@ def test_factory_selects_split_and_requests_lerobot_action_window(tmp_path) -> N
     )
 
     assert loaded.metadata.episode_indices == (0, 1, 2, 3)
-    assert loaded.metadata.normalization.unnorm_key == "so101_battery_dual_rgb_v2"
+    assert loaded.metadata.normalization.unnorm_key == "so101_cube_dual_rgb_v2"
     assert FakeLeRobotDataset.last_kwargs["episodes"] == [0, 1, 2, 3]
     assert FakeLeRobotDataset.last_kwargs["revision"] == "v3.0"
     assert FakeLeRobotDataset.last_kwargs["return_uint8"] is True
@@ -340,6 +344,27 @@ def test_factory_rejects_normalization_from_a_different_train_split(tmp_path) ->
     )
 
     with pytest.raises(ValueError, match="splits.train"):
+        create_lerobot_split_dataset(
+            config,
+            split="train",
+            dataset_cls=FakeLeRobotDataset,
+        )
+
+
+def test_factory_rejects_split_policy_mismatch(tmp_path) -> None:
+    _write_project_metadata(tmp_path)
+    config = load_sft_config(CONFIG_PATH)
+    config = replace(
+        config,
+        dataset=replace(
+            config.dataset,
+            repo_id="local/so101",
+            root=str(tmp_path),
+            split_policy=SplitPolicy.PILOT_SINGLE_TASK_GROUPED_V1,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="split policy mismatch"):
         create_lerobot_split_dataset(
             config,
             split="train",
@@ -374,7 +399,7 @@ def test_transform_preserves_language_input_and_masks_only_prompt_labels() -> No
     transformed = _transform(tokenizer)(_raw_sample())
 
     assert (
-        "What action should the robot take to pick up the red battery and place it in t0?"
+        "What action should the robot take to pick up the red cube and place it in t0?"
         in tokenizer.last_text
     )
     assert transformed["input_ids"].dtype == torch.long
@@ -387,7 +412,7 @@ def test_transform_preserves_language_input_and_masks_only_prompt_labels() -> No
     assert transformed["pixel_values"].shape == (12, 224, 224)
     assert transformed["pixel_values"][:6].eq(0).all()
     assert transformed["pixel_values"][6:].eq(1).all()
-    assert transformed["dataset_name"] == "so101_battery_dual_rgb_v2"
+    assert transformed["dataset_name"] == "so101_cube_dual_rgb_v2"
     assert transformed["proprio"].tolist() == pytest.approx(
         [-1, -0.6, -0.2, 0.2, 0.6, 1]
     )
@@ -395,7 +420,7 @@ def test_transform_preserves_language_input_and_masks_only_prompt_labels() -> No
 
 def test_transform_rejects_noncanonical_task_and_bad_padding() -> None:
     transform = _transform()
-    bad_task = _raw_sample("把红色电池放进 T0")
+    bad_task = _raw_sample("把红色方块放进 T0")
     with pytest.raises(ValueError, match="canonical SO-101 instruction"):
         transform(bad_task)
 
@@ -413,7 +438,7 @@ def test_transform_rejects_noncanonical_task_and_bad_padding() -> None:
 def test_collator_right_pads_tokens_and_stacks_oft_tensors() -> None:
     transform = _transform()
     first = transform(_raw_sample())
-    second = transform(_raw_sample("Pick up the blue battery and place it in P1."))
+    second = transform(_raw_sample("Pick up the blue cube and place it in P1."))
     collator = OpenVLABatchCollator(model_max_length=512, pad_token_id=0)
 
     batch = collator([first, second])
@@ -426,8 +451,8 @@ def test_collator_right_pads_tokens_and_stacks_oft_tensors() -> None:
     assert batch["actions"].shape == (2, 8, 6)
     assert batch["action_is_pad"].shape == (2, 8)
     assert batch["dataset_names"] == [
-        "so101_battery_dual_rgb_v2",
-        "so101_battery_dual_rgb_v2",
+        "so101_cube_dual_rgb_v2",
+        "so101_cube_dual_rgb_v2",
     ]
 
 
@@ -454,7 +479,7 @@ def test_complete_factory_exposes_openvla_statistics(tmp_path) -> None:
 
     assert len(dataset) == 1
     assert dataset[0]["actions"].shape == (8, 6)
-    assert set(dataset.dataset_statistics["so101_battery_dual_rgb_v2"]) == {
+    assert set(dataset.dataset_statistics["so101_cube_dual_rgb_v2"]) == {
         "observation.state",
         "action",
     }

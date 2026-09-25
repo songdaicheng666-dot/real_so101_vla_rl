@@ -24,7 +24,11 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from real_so101_vla_rl.data.episode_manifest import EpisodeRecord, append_episode_record
+from real_so101_vla_rl.data.episode_manifest import (
+    EpisodeRecord,
+    FailureType,
+    append_episode_record,
+)
 from real_so101_vla_rl.data.schema import (
     ACTION_KEY,
     JOINT_NAMES,
@@ -40,6 +44,12 @@ from real_so101_vla_rl.hardware.capture_types import (
 from .config import SO101RecordingConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _operator_message(message: str) -> None:
+    """Print a recording-critical prompt independently of logging handlers."""
+
+    print(f"\n[SO101 RECORDING] {message}", flush=True)
 
 
 class DatasetWriter(Protocol):
@@ -153,7 +163,7 @@ class RecordingControls:
         self.stop_requested = False
 
     def enter_phase(self, phase: str) -> None:
-        if phase not in {"recording", "confirm", "reset"}:
+        if phase not in {"layout_setup", "recording", "confirm", "reset"}:
             raise ValueError(f"Unknown recording phase: {phase}")
         with self._lock:
             self.phase = phase
@@ -168,7 +178,10 @@ class RecordingControls:
                 self.stop_requested = True
                 self.discard_requested = True
                 self.end_requested = True
-            elif self.phase == "confirm" and key in {"enter", "s"}:
+            elif self.phase in {"layout_setup", "confirm"} and key in {
+                "enter",
+                "s",
+            }:
                 self.accept_requested = True
             elif key in {"left", "r"}:
                 self.discard_requested = True
@@ -266,12 +279,39 @@ def _wait_for_confirmation(
     sleep: Callable[[float], None] = time.sleep,
 ) -> bool:
     controls.enter_phase("confirm")
-    logger.info("Episode complete: Enter/s=save, Left/r=discard, Esc/q=stop")
+    _operator_message(
+        "EPISODE COMPLETE — Enter/s=SAVE, Left/r=DISCARD, Esc/q=STOP"
+    )
     while True:
         _, accept, discard, stop = controls.snapshot()
         if stop or discard:
             return False
         if accept:
+            return True
+        sleep(0.05)
+
+
+def _wait_for_layout_setup(
+    controls: RecordingControls,
+    *,
+    episode_index: int,
+    num_episodes: int,
+    task: str,
+    layout_id: str,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
+    controls.enter_phase("layout_setup")
+    _operator_message(
+        f"PREPARE episode {episode_index + 1}/{num_episodes}\n"
+        f"Task: {task}\n"
+        f"Layout: {layout_id}\n"
+        "Press Enter/s to START RECORDING; Esc/q to STOP"
+    )
+    while True:
+        _, ready, _, stop = controls.snapshot()
+        if stop:
+            return False
+        if ready:
             return True
         sleep(0.05)
 
@@ -288,6 +328,10 @@ def _run_manual_reset(
     fps: int,
 ) -> None:
     controls.enter_phase("reset")
+    _operator_message(
+        f"RESET PHASE ({duration_s:g}s) — reposition the cube; "
+        "Right/n=CONTINUE EARLY, Esc/q=STOP"
+    )
     start = time.perf_counter()
     period_s = 1.0 / fps
     while time.perf_counter() - start < duration_s:
@@ -341,6 +385,21 @@ def run_recording_session(
     while dataset.num_episodes < config.dataset.num_episodes:
         if controls.snapshot()[3]:
             break
+        episode_index = dataset.num_episodes
+        layout_id = config.dataset.layout_id_for_episode(episode_index)
+        if config.dataset.requires_layout_setup and not _wait_for_layout_setup(
+            controls,
+            episode_index=episode_index,
+            num_episodes=config.dataset.num_episodes,
+            task=config.dataset.task,
+            layout_id=layout_id,
+        ):
+            break
+        _operator_message(
+            f"RECORDING STARTED — episode {episode_index + 1}/"
+            f"{config.dataset.num_episodes}, layout={layout_id}; "
+            "Right/n=END, Left/r=DISCARD, Esc/q=STOP"
+        )
         summary = collect_episode(
             recorder,
             controls,
@@ -349,6 +408,10 @@ def run_recording_session(
             failure_log_path=failure_path,
         )
         if summary.aborted:
+            _operator_message(
+                f"CAPTURE ABORTED — episode {episode_index + 1} was not saved; "
+                f"reason={summary.reason}"
+            )
             summaries.append(summary)
             if synchronizer.is_broken:
                 raise RuntimeError("A capture adapter failed repeatedly; stopping recording")
@@ -363,8 +426,15 @@ def run_recording_session(
                 fps=config.dataset.fps,
             )
             continue
-        if summary.reason is not None or not _wait_for_confirmation(controls):
+        confirmation_rejected = (
+            config.dataset.manual_confirmation
+            and not _wait_for_confirmation(controls)
+        )
+        if summary.reason is not None or confirmation_rejected:
             dataset.clear_episode_buffer()
+            _operator_message(
+                f"EPISODE DISCARDED — layout {layout_id} will be retried"
+            )
             summaries.append(summary)
             if controls.snapshot()[3]:
                 break
@@ -372,17 +442,24 @@ def run_recording_session(
             episode_index = dataset.num_episodes
             dataset.save_episode()
             atomic_task = AtomicTask.from_instruction(config.dataset.task)
+            is_demonstration = config.dataset.purpose == "demonstration"
             record = EpisodeRecord.from_task(
                 episode_index=episode_index,
                 trial_id=f"{config.dataset.trial_id_prefix}-{episode_index:06d}",
                 atomic_task=atomic_task,
-                layout_id=config.dataset.layout_id,
-                success=True,
-                failure_type=None,
+                layout_id=layout_id,
+                success=is_demonstration,
+                failure_type=(
+                    None if is_demonstration else FailureType.STATIC_VALIDATION
+                ),
                 num_frames=summary.num_frames,
                 duration_s=summary.duration_s,
             )
             append_episode_record(manifest_path, record)
+            _operator_message(
+                f"EPISODE SAVED — index={episode_index}, layout={layout_id}, "
+                f"frames={summary.num_frames}"
+            )
             accepted = EpisodeCaptureSummary(
                 True, False, summary.num_frames, summary.duration_s
             )

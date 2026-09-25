@@ -10,6 +10,11 @@ from typing import Any
 import yaml
 
 from real_so101_vla_rl.data.schema import DEFAULT_FPS, AtomicTask
+from real_so101_vla_rl.data.splits import SplitPolicy
+from real_so101_vla_rl.hardware.cameras.profile import (
+    LoadedCameraRigProfile,
+    load_camera_rig_profile,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,20 +35,25 @@ class DatasetRecordingConfig:
     repo_id: str
     root: str
     task: str
-    layout_id: str
+    layout_id: str | None
     trial_id_prefix: str
     num_episodes: int = 10
     episode_time_s: float = 60.0
     reset_time_s: float = 30.0
     fps: int = DEFAULT_FPS
     rgb_use_videos: bool = True
+    purpose: str = "demonstration"
+    manual_confirmation: bool = True
+    layout_ids: tuple[str, ...] = ()
+    split_policy: SplitPolicy = SplitPolicy.FULL_TASK_LAYOUT_V1
+    normalization_key: str = "so101_cube_dual_rgb_v2"
 
     def __post_init__(self) -> None:
         if not self.repo_id.strip() or not self.root.strip():
             raise ValueError("dataset.repo_id and dataset.root must not be empty")
         AtomicTask.from_instruction(self.task)
-        if not self.layout_id.strip() or not self.trial_id_prefix.strip():
-            raise ValueError("dataset layout_id and trial_id_prefix must not be empty")
+        if not self.trial_id_prefix.strip():
+            raise ValueError("dataset.trial_id_prefix must not be empty")
         if self.num_episodes <= 0:
             raise ValueError("dataset.num_episodes must be positive")
         if self.episode_time_s <= 0 or self.reset_time_s < 0:
@@ -52,20 +62,59 @@ class DatasetRecordingConfig:
             raise ValueError(f"Schema v2 recording fps is fixed at {DEFAULT_FPS}")
         if type(self.rgb_use_videos) is not bool:
             raise TypeError("dataset.rgb_use_videos must be a boolean")
+        if self.purpose not in {"demonstration", "static_validation"}:
+            raise ValueError(
+                "dataset.purpose must be 'demonstration' or 'static_validation'"
+            )
+        if type(self.manual_confirmation) is not bool:
+            raise TypeError("dataset.manual_confirmation must be a boolean")
+        if not isinstance(self.normalization_key, str) or not self.normalization_key.strip():
+            raise ValueError("dataset.normalization_key must be a non-empty string")
+        fixed_layout = (
+            isinstance(self.layout_id, str) and bool(self.layout_id.strip())
+        )
+        planned_layouts = bool(self.layout_ids)
+        if fixed_layout == planned_layouts:
+            raise ValueError(
+                "dataset must configure exactly one of layout_id or layout_ids"
+            )
+        if self.layout_id is not None and not fixed_layout:
+            raise ValueError("dataset.layout_id must be null or a non-empty string")
+        if planned_layouts:
+            if len(self.layout_ids) != self.num_episodes:
+                raise ValueError(
+                    "dataset.layout_ids must contain exactly num_episodes entries"
+                )
+            if any(not isinstance(value, str) or not value.strip() for value in self.layout_ids):
+                raise ValueError("dataset.layout_ids entries must be non-empty strings")
+            if len(set(self.layout_ids)) != len(self.layout_ids):
+                raise ValueError("dataset.layout_ids entries must be unique")
+        SplitPolicy(self.split_policy)
+
+    def layout_id_for_episode(self, episode_index: int) -> str:
+        if not 0 <= episode_index < self.num_episodes:
+            raise IndexError(
+                f"episode_index must be in [0, {self.num_episodes}), got {episode_index}"
+            )
+        if self.layout_ids:
+            return self.layout_ids[episode_index]
+        assert self.layout_id is not None
+        return self.layout_id
+
+    @property
+    def requires_layout_setup(self) -> bool:
+        return bool(self.layout_ids)
 
 
 @dataclass(frozen=True, slots=True)
 class CameraRecordingConfig:
-    orbbec_serial: str | None
-    wrist_device: str | int | None
+    profile_path: Path
+    rig: LoadedCameraRigProfile
 
     def validate(self, *, require_hardware_ready: bool) -> None:
-        if require_hardware_ready and not self.orbbec_serial:
-            raise ValueError("cameras.orbbec_serial must be configured")
-        if require_hardware_ready and self.wrist_device is None:
-            raise ValueError(
-                "cameras.wrist_device must be configured; /dev/video4 is deliberately not a default"
-            )
+        del require_hardware_ready  # Live identity is checked by camera preflight.
+        if self.rig.path != self.profile_path:
+            raise ValueError("loaded camera profile path differs from recording config")
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +168,16 @@ def load_recording_config(
             "dataset.use_videos was removed; use dataset.rgb_use_videos. "
             "Aligned depth always uses lossless TIFF storage."
         )
+    layout_ids_raw = dataset_raw.get("layout_ids", ())
+    if not isinstance(layout_ids_raw, (list, tuple)):
+        raise TypeError("dataset.layout_ids must be a sequence")
+    dataset_raw["layout_ids"] = tuple(layout_ids_raw)
+    try:
+        dataset_raw["split_policy"] = SplitPolicy(
+            dataset_raw.get("split_policy", SplitPolicy.FULL_TASK_LAYOUT_V1)
+        )
+    except ValueError as exc:
+        raise ValueError("dataset.split_policy is unsupported") from exc
     dataset = DatasetRecordingConfig(**dataset_raw)
     follower_raw = dict(_mapping(raw, "follower"))
     leader_raw = dict(_mapping(raw, "leader"))
@@ -132,11 +191,25 @@ def load_recording_config(
         robot_id=str(leader_raw.get("id", "so101_leader")),
         calibration_dir=leader_raw.get("calibration_dir"),
     )
+    cameras_raw = dict(_mapping(raw, "cameras"))
+    removed_camera_keys = {"orbbec_serial", "wrist_device"} & set(cameras_raw)
+    if removed_camera_keys:
+        raise ValueError(
+            "cameras.orbbec_serial and cameras.wrist_device were removed; "
+            "configure only cameras.profile"
+        )
+    if set(cameras_raw) != {"profile"}:
+        raise ValueError("cameras must contain exactly one field: profile")
+    profile_value = cameras_raw["profile"]
+    if not isinstance(profile_value, str) or not profile_value.strip():
+        raise ValueError("cameras.profile must be a non-empty path")
+    profile_path = (Path(path).resolve().parent / profile_value).resolve()
+    camera_rig = load_camera_rig_profile(profile_path)
     config = SO101RecordingConfig(
         dataset=dataset,
         follower=follower,
         leader=leader,
-        cameras=CameraRecordingConfig(**dict(_mapping(raw, "cameras"))),
+        cameras=CameraRecordingConfig(profile_path=profile_path, rig=camera_rig),
         sync=SynchronizerConfig(**dict(raw.get("sync", {}))),
         max_relative_target=raw.get("max_relative_target"),
     )

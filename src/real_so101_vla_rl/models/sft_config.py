@@ -19,6 +19,7 @@ from real_so101_vla_rl.data.schema import (
     STATE_KEY,
     TASK_KEY,
 )
+from real_so101_vla_rl.data.splits import SplitPolicy
 
 
 def _require_type(value: Any, expected_type: type, name: str) -> None:
@@ -64,6 +65,7 @@ class DatasetConfig:
     task_language: str
     task_format: str
     successful_episodes_only: bool
+    split_policy: SplitPolicy
     normalization: NormalizationConfig
 
     def validate(self) -> None:
@@ -85,6 +87,7 @@ class DatasetConfig:
             raise ValueError("project_meta_dir must be 'project_meta'")
         if self.successful_episodes_only is not True:
             raise ValueError("SFT must filter to successful episodes")
+        SplitPolicy(self.split_policy)
         for value, name in (
             (self.repo_id, "repo_id"),
             (self.root, "root"),
@@ -290,6 +293,12 @@ def load_sft_config(path: str | Path, *, require_training_ready: bool = False) -
     dataset_raw["normalization"] = _construct(
         NormalizationConfig, normalization_raw, "dataset.normalization"
     )
+    try:
+        dataset_raw["split_policy"] = SplitPolicy(dataset_raw["split_policy"])
+    except KeyError as exc:
+        raise ValueError("dataset.split_policy is required") from exc
+    except ValueError as exc:
+        raise ValueError("dataset.split_policy is unsupported") from exc
     if isinstance(dataset_raw.get("image_keys"), list):
         dataset_raw["image_keys"] = tuple(dataset_raw["image_keys"])
 

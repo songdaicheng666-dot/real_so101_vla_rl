@@ -11,6 +11,12 @@ import numpy as np
 from real_so101_vla_rl.data.schema import IMAGE_HEIGHT, IMAGE_WIDTH
 
 from ..capture_types import CapturedSample, RGBDFrame
+from .identity import (
+    OrbbecSDKSelection,
+    select_orbbec_device,
+    validate_live_orbbec_calibration,
+)
+from .profile import LoadedCameraRigProfile
 
 
 def _format_name(frame: Any) -> str:
@@ -94,6 +100,8 @@ class OrbbecRGBDAdapter:
         clock_ns: Callable[[], int] = time.monotonic_ns,
         max_consecutive_failures: int = 3,
         enable_frame_sync: bool = True,
+        sdk_resources: tuple[Any, ...] = (),
+        sdk_selection: OrbbecSDKSelection | None = None,
     ) -> None:
         if max_consecutive_failures <= 0:
             raise ValueError("max_consecutive_failures must be positive")
@@ -103,6 +111,8 @@ class OrbbecRGBDAdapter:
         self._clock_ns = clock_ns
         self._max_failures = max_consecutive_failures
         self._enable_frame_sync = enable_frame_sync
+        self._sdk_resources = sdk_resources
+        self._sdk_selection = sdk_selection
         self._failures = 0
         self._sequence_id = 0
         self._connected = False
@@ -114,53 +124,96 @@ class OrbbecRGBDAdapter:
         serial_number: str,
         clock_ns: Callable[[], int] = time.monotonic_ns,
         max_consecutive_failures: int = 3,
+        sdk: Any | None = None,
     ) -> OrbbecRGBDAdapter:
         """Construct fixed streams; stable device discovery is supplied separately."""
 
         if not serial_number.strip():
             raise ValueError("The Orbbec serial number must be provided")
-        try:
-            from pyorbbecsdk import (
-                AlignFilter,
-                Config,
-                Context,
-                OBFormat,
-                OBFrameAggregateOutputMode,
-                OBSensorType,
-                OBStreamType,
-                Pipeline,
-            )
-        except ImportError as exc:
-            raise RuntimeError(
-                "Orbbec SDK is unavailable; install pyorbbecsdk2==2.1.2 in the "
-                "hardware environment"
-            ) from exc
+        if sdk is None:
+            try:
+                import pyorbbecsdk as sdk
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Orbbec SDK is unavailable; install pyorbbecsdk2==2.1.2 in the "
+                    "hardware environment"
+                ) from exc
 
-        devices = Context().query_devices()
+        context = sdk.Context()
+        devices = context.query_devices()
         device = devices.get_device_by_serial_number(serial_number)
-        pipeline = Pipeline(device)
-        color_profiles = pipeline.get_stream_profile_list(OBSensorType.COLOR_SENSOR)
-        depth_profiles = pipeline.get_stream_profile_list(OBSensorType.DEPTH_SENSOR)
+        pipeline = sdk.Pipeline(device)
+        color_profiles = pipeline.get_stream_profile_list(sdk.OBSensorType.COLOR_SENSOR)
+        depth_profiles = pipeline.get_stream_profile_list(sdk.OBSensorType.DEPTH_SENSOR)
         color_profile = color_profiles.get_video_stream_profile(
-            IMAGE_WIDTH, IMAGE_HEIGHT, OBFormat.MJPG, 30
+            IMAGE_WIDTH, IMAGE_HEIGHT, sdk.OBFormat.MJPG, 30
         )
         depth_profile = depth_profiles.get_video_stream_profile(
-            640, 400, OBFormat.Y16, 30
+            640, 400, sdk.OBFormat.Y16, 30
         )
-        config = Config()
+        config = sdk.Config()
         config.enable_stream(color_profile)
         config.enable_stream(depth_profile)
         config.set_frame_aggregate_output_mode(
-            OBFrameAggregateOutputMode.FULL_FRAME_REQUIRE
+            sdk.OBFrameAggregateOutputMode.FULL_FRAME_REQUIRE
         )
-        align_filter = AlignFilter(align_to_stream=OBStreamType.COLOR_STREAM)
+        align_filter = sdk.AlignFilter(align_to_stream=sdk.OBStreamType.COLOR_STREAM)
         return cls(
             pipeline,
             config=config,
             align_filter=align_filter,
             clock_ns=clock_ns,
             max_consecutive_failures=max_consecutive_failures,
+            sdk_resources=(context, devices, device),
         )
+
+    @classmethod
+    def from_profile(
+        cls,
+        loaded: LoadedCameraRigProfile,
+        *,
+        clock_ns: Callable[[], int] = time.monotonic_ns,
+        max_consecutive_failures: int = 3,
+        sdk: Any | None = None,
+        sys_usb_root: str = "/sys/bus/usb/devices",
+    ) -> OrbbecRGBDAdapter:
+        """Construct and strictly validate the configured Orbbec RGB-D device."""
+
+        profile = loaded.profile.overview
+        selection = select_orbbec_device(
+            profile,
+            sdk=sdk,
+            sys_usb_root=sys_usb_root,
+        )
+        validate_live_orbbec_calibration(selection, loaded)
+        config = selection.sdk.Config()
+        config.enable_stream(selection.color_profile)
+        config.enable_stream(selection.depth_profile)
+        config.set_frame_aggregate_output_mode(
+            selection.sdk.OBFrameAggregateOutputMode.FULL_FRAME_REQUIRE
+        )
+        align_filter = selection.sdk.AlignFilter(
+            align_to_stream=selection.sdk.OBStreamType.COLOR_STREAM
+        )
+        return cls(
+            selection.pipeline,
+            config=config,
+            align_filter=align_filter,
+            clock_ns=clock_ns,
+            max_consecutive_failures=max_consecutive_failures,
+            enable_frame_sync=profile.frame_sync,
+            sdk_resources=(
+                selection.context,
+                selection.devices,
+                selection.device,
+                selection,
+            ),
+            sdk_selection=selection,
+        )
+
+    @property
+    def sdk_selection(self) -> OrbbecSDKSelection | None:
+        return self._sdk_selection
 
     @property
     def is_connected(self) -> bool:

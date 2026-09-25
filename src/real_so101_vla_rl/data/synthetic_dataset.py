@@ -15,7 +15,12 @@ from .episode_manifest import EpisodeRecord, write_episode_manifest
 from .lerobot_dataset import ensure_lerobot_hub_compat
 from .lerobot_features import build_so101_lerobot_features
 from .normalization import compute_normalization_stats, write_normalization_stats
-from .robot_profile import MOTOR_IDS, build_robot_profile, write_robot_profile
+from .robot_profile import (
+    LEROBOT_COMMIT,
+    MOTOR_IDS,
+    build_robot_profile,
+    write_robot_profile,
+)
 from .schema import (
     ACTION_KEY,
     DEFAULT_FPS,
@@ -33,7 +38,7 @@ from .schema import (
     STATE_KEY,
     WRIST_IMAGE_KEY,
     AtomicTask,
-    BatteryColor,
+    CubeColor,
     TargetSlot,
     TaskType,
     validate_frame,
@@ -44,7 +49,6 @@ DEFAULT_SYNTHETIC_REPO_ID = (
     "local/so101_synthetic_overfit_v2_lossless_depth"
 )
 DEFAULT_FRAMES_PER_EPISODE = 24
-LEROBOT_COMMIT = "4aaff99be4a1d81568c08c8f0296b41b40c99ec4"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,27 +78,27 @@ def synthetic_episode_specs() -> tuple[SyntheticEpisodeSpec, ...]:
 
     tasks_and_targets = (
         (
-            AtomicTask(TaskType.SINGLE_T0, BatteryColor.RED, TargetSlot.T0, 0),
+            AtomicTask(TaskType.SINGLE_T0, CubeColor.RED, TargetSlot.T0, 0),
             (-30.0, -20.0, 40.0, 15.0, -20.0, 20.0),
         ),
         (
-            AtomicTask(TaskType.SEQUENCE_STEP, BatteryColor.BLUE, TargetSlot.P1, 1),
+            AtomicTask(TaskType.SEQUENCE_STEP, CubeColor.BLUE, TargetSlot.P1, 1),
             (-10.0, 0.0, 20.0, -5.0, 0.0, 40.0),
         ),
         (
-            AtomicTask(TaskType.SEQUENCE_STEP, BatteryColor.YELLOW, TargetSlot.P2, 2),
+            AtomicTask(TaskType.SEQUENCE_STEP, CubeColor.YELLOW, TargetSlot.P2, 2),
             (10.0, 20.0, 0.0, -25.0, 20.0, 60.0),
         ),
         (
-            AtomicTask(TaskType.SEQUENCE_STEP, BatteryColor.GREEN, TargetSlot.P3, 3),
+            AtomicTask(TaskType.SEQUENCE_STEP, CubeColor.GREEN, TargetSlot.P3, 3),
             (30.0, 40.0, -20.0, -45.0, 40.0, 80.0),
         ),
         (
-            AtomicTask(TaskType.SINGLE_T0, BatteryColor.RED, TargetSlot.T0, 0),
+            AtomicTask(TaskType.SINGLE_T0, CubeColor.RED, TargetSlot.T0, 0),
             (-30.0, -20.0, 40.0, 15.0, -20.0, 20.0),
         ),
         (
-            AtomicTask(TaskType.SEQUENCE_STEP, BatteryColor.BLUE, TargetSlot.P1, 1),
+            AtomicTask(TaskType.SEQUENCE_STEP, CubeColor.BLUE, TargetSlot.P1, 1),
             (-10.0, 0.0, 20.0, -5.0, 0.0, 40.0),
         ),
     )
@@ -121,10 +125,10 @@ def synthetic_episode_specs() -> tuple[SyntheticEpisodeSpec, ...]:
 
 
 _COLORS = {
-    BatteryColor.RED: (220, 45, 45),
-    BatteryColor.BLUE: (45, 90, 220),
-    BatteryColor.YELLOW: (230, 190, 35),
-    BatteryColor.GREEN: (45, 175, 75),
+    CubeColor.RED: (220, 45, 45),
+    CubeColor.BLUE: (45, 90, 220),
+    CubeColor.YELLOW: (230, 190, 35),
+    CubeColor.GREEN: (45, 175, 75),
 }
 _SLOT_POSITIONS = {
     TargetSlot.T0: (445, 80, 575, 155),
@@ -149,30 +153,29 @@ def render_synthetic_frame(
         draw.text((box[0] + 8, box[1] + 8), slot.value, fill=(25, 25, 25))
 
     completed = {
-        TargetSlot.P2: ((TargetSlot.P1, BatteryColor.BLUE),),
+        TargetSlot.P2: ((TargetSlot.P1, CubeColor.BLUE),),
         TargetSlot.P3: (
-            (TargetSlot.P1, BatteryColor.BLUE),
-            (TargetSlot.P2, BatteryColor.YELLOW),
+            (TargetSlot.P1, CubeColor.BLUE),
+            (TargetSlot.P2, CubeColor.YELLOW),
         ),
     }.get(spec.task.target_slot, ())
     for slot, color in completed:
         left, top, right, bottom = _SLOT_POSITIONS[slot]
-        draw.ellipse(
-            (left + 18, top + 25, right - 18, bottom - 8),
+        draw.rectangle(
+            (left + 22, top + 18, right - 22, bottom - 18),
             fill=_COLORS[color],
         )
 
-    battery_x = 90 + spec.episode_index * 35
-    battery_y = 245
-    draw.rounded_rectangle(
-        (battery_x, battery_y, battery_x + 105, battery_y + 55),
-        radius=10,
+    cube_x = 90 + spec.episode_index * 35
+    cube_y = 245
+    draw.rectangle(
+        (cube_x, cube_y, cube_x + 70, cube_y + 70),
         fill=_COLORS[spec.task.target_color],
         outline=(35, 35, 35),
         width=3,
     )
     draw.text(
-        (battery_x + 12, battery_y + 18),
+        (cube_x + 12, cube_y + 25),
         spec.task.target_color.value,
         fill=(15, 15, 15),
     )
@@ -457,7 +460,7 @@ def create_synthetic_so101_dataset(
     normalization = compute_normalization_stats(
         train_samples,
         train_episode_indices=splits.train,
-        unnorm_key="so101_battery_dual_rgb_v2",
+        unnorm_key="so101_cube_dual_rgb_v2",
     )
     write_normalization_stats(
         project_meta / "norm_stats.json", normalization

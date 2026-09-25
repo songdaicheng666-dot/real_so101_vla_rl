@@ -73,7 +73,7 @@ JOINT_UNITS = (
 )
 
 _INSTRUCTION_PATTERN = re.compile(
-    r"^Pick up the (red|blue|yellow|green) battery and place it in (T0|P1|P2|P3)\.$"
+    r"^Pick up the (red|blue|yellow|green) cube and place it in (T0|P1|P2|P3)\.$"
 )
 
 
@@ -84,7 +84,7 @@ class TaskType(StrEnum):
     SEQUENCE_STEP = "sequence_step"
 
 
-class BatteryColor(StrEnum):
+class CubeColor(StrEnum):
     RED = "red"
     BLUE = "blue"
     YELLOW = "yellow"
@@ -108,10 +108,10 @@ _SLOT_TO_STEP = {
 
 @dataclass(frozen=True, slots=True)
 class AtomicTask:
-    """One battery transfer with a deterministic OpenVLA instruction."""
+    """One colored-cube transfer with a deterministic OpenVLA instruction."""
 
     task_type: TaskType
-    target_color: BatteryColor
+    target_color: CubeColor
     target_slot: TargetSlot
     sequence_step: int
 
@@ -131,7 +131,7 @@ class AtomicTask:
     @property
     def instruction(self) -> str:
         return (
-            f"Pick up the {self.target_color.value} battery "
+            f"Pick up the {self.target_color.value} cube "
             f"and place it in {self.target_slot.value}."
         )
 
@@ -141,7 +141,7 @@ class AtomicTask:
         if match is None:
             raise ValueError(f"Task is not a canonical SO-101 instruction: {instruction!r}")
 
-        color = BatteryColor(match.group(1))
+        color = CubeColor(match.group(1))
         slot = TargetSlot(match.group(2))
         task_type = TaskType.SINGLE_T0 if slot is TargetSlot.T0 else TaskType.SEQUENCE_STEP
         return cls(task_type, color, slot, _SLOT_TO_STEP[slot])
