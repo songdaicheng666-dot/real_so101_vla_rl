@@ -1,0 +1,106 @@
+{
+  "checks": {
+    "all_recorded_metrics_finite": true,
+    "artifacts_complete": true,
+    "base_preflight_finite": true,
+    "base_preflight_shape_2_8_6": true,
+    "checkpoint_preflight_finite": true,
+    "checkpoint_preflight_shape_2_8_6": true,
+    "final_test_loss_finite": true,
+    "last10_train_loss_below_first10": true,
+    "metrics_rows_200": true,
+    "run_manifest_complete": true,
+    "steps_contiguous_1_to_200": true,
+    "ten_validation_points": true
+  },
+  "dataset": {
+    "archive_sha256": "e3622c5470b1291b70fc6b02dc38348be1396c28824a950481a9e3a33a613de8",
+    "episodes": 20,
+    "frames": 13976,
+    "split_policy": "pilot_single_task_grouped_v1",
+    "train_val_test_episodes": [
+      16,
+      2,
+      2
+    ]
+  },
+  "preflight": {
+    "base": {
+      "loss": 0.59765625,
+      "peak_gpu_memory_gib": 15.94,
+      "predicted_actions_shape": [
+        2,
+        8,
+        6
+      ]
+    },
+    "checkpoint_000200": {
+      "loss": 0.2490234375,
+      "peak_gpu_memory_gib": 15.91,
+      "predicted_actions_shape": [
+        2,
+        8,
+        6
+      ]
+    }
+  },
+  "schema_version": 1,
+  "source": {
+    "archive_sha256": "4bb1c344f6499311232cd003e646996d9c8d1b38e8e5f28987c1774f03eb3105",
+    "tree_sha256": "ae0205d31261a76d6d7c13335e84b8b81abf92f8879ed177b1a239f0c88add41"
+  },
+  "status": "pass",
+  "training": {
+    "elapsed_seconds": 3258.015240294393,
+    "final_smoothed_train_loss": 0.16611328125,
+    "final_test_loss": 0.19933279854910715,
+    "final_train_loss": 0.154296875,
+    "first10_train_loss_mean": 2.18359375,
+    "last10_over_first10": 0.07607334525939177,
+    "last10_train_loss_mean": 0.16611328125,
+    "metrics_rows": 200,
+    "peak_gpu_memory_gib": 18.36,
+    "validation": [
+      {
+        "loss": 0.6906232664571006,
+        "step": 20
+      },
+      {
+        "loss": 0.6462387897559172,
+        "step": 40
+      },
+      {
+        "loss": 0.5286164594119822,
+        "step": 60
+      },
+      {
+        "loss": 0.3488805646727071,
+        "step": 80
+      },
+      {
+        "loss": 0.3200539131841716,
+        "step": 100
+      },
+      {
+        "loss": 0.28107592340051774,
+        "step": 120
+      },
+      {
+        "loss": 0.2642612795857988,
+        "step": 140
+      },
+      {
+        "loss": 0.2546632303994083,
+        "step": 160
+      },
+      {
+        "loss": 0.18074748925203402,
+        "step": 180
+      },
+      {
+        "loss": 0.17752526638775887,
+        "step": 200
+      }
+    ]
+  }
+}

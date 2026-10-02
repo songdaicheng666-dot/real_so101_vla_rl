@@ -1,6 +1,6 @@
 dataset:
   repo_id: local/so101_real_schema_v2
-  root: artifacts/datasets/so101_real_schema_v2
+  root: datasets/so101_real_schema_v2
   task: Pick up the blue cube and place it in T0.
   layout_id: competition_2026_basic_t0
   trial_id_prefix: real-basic-t0

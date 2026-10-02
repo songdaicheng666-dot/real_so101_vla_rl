@@ -41,7 +41,9 @@ def main() -> None:
     )
     from real_so101_vla_rl.recording import (
         load_recording_config,
+        validate_recording_plan_metadata,
         validate_recording_root_mode,
+        validate_recording_storage,
     )
 
     config = load_recording_config(
@@ -54,6 +56,10 @@ def main() -> None:
         )
         return
     validate_recording_root_mode(config, resume=args.resume)
+    if args.resume:
+        validate_recording_plan_metadata(config)
+    free_gib = validate_recording_storage(config)
+    logger.info("Recording storage preflight passed: %.2f GiB free", free_gib)
 
     try:
         from lerobot.configs.video import RGBEncoderConfig
@@ -86,6 +92,7 @@ def main() -> None:
     )
     from real_so101_vla_rl.recording.dataset_lifecycle import (
         validate_resumed_recording_dataset,
+        write_recording_plan_metadata,
         write_recording_robot_profile,
     )
     from real_so101_vla_rl.recording.lerobot_v2 import (
@@ -157,7 +164,9 @@ def main() -> None:
         ),
     )
     if listener is None:
-        raise SystemExit("An interactive keyboard is required to confirm recorded episodes")
+        raise SystemExit(
+            "An interactive keyboard is required to confirm recorded episodes"
+        )
 
     dataset = None
     try:
@@ -198,6 +207,7 @@ def main() -> None:
                 features=features,
                 use_videos=config.dataset.rgb_use_videos,
             )
+        write_recording_plan_metadata(config, resume=args.resume)
         write_camera_setup_metadata(
             config.dataset.root,
             config.cameras.rig,

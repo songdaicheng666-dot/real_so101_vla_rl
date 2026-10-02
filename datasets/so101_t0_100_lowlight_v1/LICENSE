@@ -1,0 +1,23 @@
+SO-101 T0 100 Lowlight v1 Dataset License
+
+Copyright (c) 2026 real_so101_vla_rl contributors
+
+The contents of this dataset directory are licensed under the Creative Commons
+Attribution 4.0 International License (CC BY 4.0).
+
+You may share and adapt the dataset for any purpose, including commercial use,
+provided that you give appropriate credit, provide a link to the license, and
+indicate whether changes were made. You may not apply legal terms or technical
+measures that restrict others from exercising the rights granted by the
+license.
+
+The complete legal terms are available at:
+https://creativecommons.org/licenses/by/4.0/legalcode
+
+Suggested attribution:
+"SO-101 T0 100 Lowlight v1", real_so101_vla_rl contributors,
+https://github.com/songdaicheng666-dot/real_so101_vla_rl
+
+This license applies only to this dataset directory. It does not change the
+license of the surrounding source repository, calibration evidence, training
+runs, or third-party assets.

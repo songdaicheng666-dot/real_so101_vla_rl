@@ -1,0 +1,8 @@
+{
+  "algorithm": "grpo",
+  "device": "cpu",
+  "route": "hybrid",
+  "source": "sim",
+  "start_update": 0,
+  "task": "basic_t0"
+}

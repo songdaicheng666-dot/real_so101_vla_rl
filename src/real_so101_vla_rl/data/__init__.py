@@ -9,6 +9,7 @@ from .episode_manifest import (
     validate_episode_manifest,
     write_episode_manifest,
 )
+from .hf_cache import temporary_hf_datasets_cache
 from .lerobot_features import build_so101_lerobot_features
 from .normalization import (
     FeatureStats,
@@ -127,6 +128,7 @@ __all__ = [
     "normalize_q99",
     "ordered_joint_vector",
     "project_model_inputs",
+    "temporary_hf_datasets_cache",
     "unnormalize_q99",
     "validate_dataset_splits",
     "validate_episode_manifest",

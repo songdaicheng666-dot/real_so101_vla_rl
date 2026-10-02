@@ -1,0 +1,151 @@
+{
+  "artifacts": {
+    "final_checkpoint": "checkpoint-000200",
+    "loss_curve": "loss_curve.png",
+    "metrics_csv": "metrics.csv",
+    "metrics_jsonl": "metrics.jsonl"
+  },
+  "command": [
+    "/root/autodl-tmp/releases/real_so101_vla_rl-pilot-4bb1c344f649/scripts/train_openvla_oft_sft.py",
+    "--config",
+    "/root/autodl-tmp/releases/real_so101_vla_rl-pilot-4bb1c344f649/configs/sft/openvla_oft_real_pilot_lowlight.yaml",
+    "--cache-dir",
+    "/root/autodl-tmp/huggingface",
+    "--local-files-only"
+  ],
+  "config": {
+    "dataset": {
+      "action_key": "action",
+      "action_source": "robot_send_action_return",
+      "fps": 30,
+      "image_keys": [
+        "observation.images.overview",
+        "observation.images.wrist"
+      ],
+      "normalization": {
+        "clip": true,
+        "lower_quantile": 0.01,
+        "method": "bounds_q99",
+        "stats_split": "train",
+        "unnorm_key": "so101_cube_dual_rgb_v2",
+        "upper_quantile": 0.99
+      },
+      "project_meta_dir": "project_meta",
+      "repo_id": "local/so101_real_pilot_lowlight_v2",
+      "revision": null,
+      "root": "/root/autodl-tmp/datasets/so101_real_pilot_lowlight_v2",
+      "split_policy": "pilot_single_task_grouped_v1",
+      "state_key": "observation.state",
+      "successful_episodes_only": true,
+      "task_format": "canonical_atomic_transfer_v1",
+      "task_key": "task",
+      "task_language": "en"
+    },
+    "experiment_name": "so101_real_pilot_lowlight_openvla_oft_lora",
+    "lora": {
+      "alpha": 16,
+      "dropout": 0.0,
+      "enabled": true,
+      "rank": 32,
+      "target_modules": "all-linear"
+    },
+    "model": {
+      "action_chunk_size": 8,
+      "action_dim": 6,
+      "action_head": "continuous",
+      "action_representation": "absolute_joint_target",
+      "adapter": "openvla_oft",
+      "checkpoint": "openvla/openvla-7b",
+      "image_size": 224,
+      "loss": "l1",
+      "num_images": 2,
+      "proprio_dim": 6,
+      "use_proprio": true
+    },
+    "optimizer": {
+      "learning_rate": 0.0005,
+      "name": "adamw",
+      "scheduler": "cosine",
+      "warmup_ratio": 0.03,
+      "weight_decay": 0.0
+    },
+    "schema_version": 2,
+    "training": {
+      "bf16": true,
+      "eval_steps": 20,
+      "gradient_accumulation_steps": 1,
+      "gradient_checkpointing": true,
+      "image_augmentation": false,
+      "logging_steps": 1,
+      "max_steps": 200,
+      "num_workers": 0,
+      "output_dir": "/root/autodl-tmp/runs/so101_real_pilot_lowlight_v2",
+      "per_device_train_batch_size": 2,
+      "save_steps": 100,
+      "save_total_limit": 2,
+      "seed": 42
+    }
+  },
+  "cuda_runtime": "12.8",
+  "dataset": {
+    "test": {
+      "episodes": [
+        5,
+        19
+      ],
+      "frames": 1399
+    },
+    "train": {
+      "episodes": [
+        0,
+        1,
+        2,
+        3,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        15,
+        16,
+        17,
+        18
+      ],
+      "frames": 11225
+    },
+    "val": {
+      "episodes": [
+        4,
+        14
+      ],
+      "frames": 1352
+    }
+  },
+  "elapsed_seconds": 3258.015240294393,
+  "final_smoothed_train_loss": 0.16611328125,
+  "final_test_loss": 0.19933279854910715,
+  "final_train_loss": 0.154296875,
+  "finished_at_unix": 1790354619.8754637,
+  "git_commit": null,
+  "gpu": {
+    "name": "NVIDIA A100-PCIE-40GB",
+    "total_memory_gib": 39.49
+  },
+  "packages": {
+    "flash-attn": "2.7.4.post1",
+    "lerobot": "0.6.2",
+    "peft": "0.11.1",
+    "transformers": "4.40.1"
+  },
+  "peak_gpu_memory_gib": 18.36,
+  "platform": "Linux-5.15.0-86-generic-x86_64-with-glibc2.35",
+  "python": "3.12.14",
+  "source_archive_sha256": "4bb1c344f6499311232cd003e646996d9c8d1b38e8e5f28987c1774f03eb3105",
+  "source_tree_sha256": "ae0205d31261a76d6d7c13335e84b8b81abf92f8879ed177b1a239f0c88add41",
+  "started_at_unix": 1790351361.792057,
+  "status": "complete",
+  "torch": "2.7.1+cu128"
+}

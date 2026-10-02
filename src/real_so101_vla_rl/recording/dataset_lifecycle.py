@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -13,14 +15,91 @@ from real_so101_vla_rl.data import (
     load_episode_manifest,
     write_robot_profile,
 )
+from real_so101_vla_rl.data.robot_profile import _atomic_write
 
 from .config import SO101RecordingConfig
 
+RECORDING_PLAN_FILENAME = "recording_plan.json"
 FINALIZED_METADATA_FILENAMES = (
     "splits.json",
     "norm_stats.json",
     "finalization.json",
 )
+
+
+def validate_recording_storage(config: SO101RecordingConfig) -> float:
+    """Fail before hardware startup when the configured data volume is too full."""
+
+    required_gib = float(config.dataset.min_free_gib)
+    root = Path(config.dataset.root).expanduser().resolve()
+    probe = root
+    while not probe.exists():
+        parent = probe.parent
+        if parent == probe:
+            raise FileNotFoundError(
+                f"No existing parent is available for dataset root {root}"
+            )
+        probe = parent
+    free_gib = shutil.disk_usage(probe).free / (1024**3)
+    if free_gib < required_gib:
+        raise OSError(
+            f"Insufficient free space for recording: available={free_gib:.2f} GiB, "
+            f"required={required_gib:.2f} GiB, filesystem={probe}"
+        )
+    return free_gib
+
+
+def _recording_plan_payload(config: SO101RecordingConfig) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "plan_sha256": config.dataset.plan_sha256,
+        "repo_id": config.dataset.repo_id,
+        "num_episodes": config.dataset.num_episodes,
+        "session_size": config.dataset.session_size,
+        "entries": [
+            {
+                "episode_index": entry.episode_index,
+                "task": entry.task,
+                "layout_id": entry.layout_id,
+            }
+            for entry in config.dataset.plan_entries()
+        ],
+    }
+
+
+def validate_recording_plan_metadata(config: SO101RecordingConfig) -> None:
+    path = Path(config.dataset.root) / "project_meta" / RECORDING_PLAN_FILENAME
+    if not path.is_file():
+        if config.dataset.task_plan is not None:
+            raise FileNotFoundError(f"Recording plan metadata is missing: {path}")
+        return
+    actual = json.loads(path.read_text(encoding="utf-8"))
+    expected = _recording_plan_payload(config)
+    if actual != expected:
+        raise ValueError(
+            f"Recorded plan metadata differs from the configured plan: {path}"
+        )
+
+
+def write_recording_plan_metadata(
+    config: SO101RecordingConfig,
+    *,
+    resume: bool,
+) -> None:
+    path = Path(config.dataset.root) / "project_meta" / RECORDING_PLAN_FILENAME
+    if path.exists() or resume:
+        validate_recording_plan_metadata(config)
+        return
+    payload = (
+        json.dumps(
+            _recording_plan_payload(config),
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ).encode("utf-8")
+        + b"\n"
+    )
+    _atomic_write(path, payload)
 
 
 def validate_recording_root_mode(config: SO101RecordingConfig, *, resume: bool) -> None:
@@ -132,7 +211,7 @@ def validate_resumed_recording_dataset(
         expected_trial = f"{config.dataset.trial_id_prefix}-{expected_index:06d}"
         if (
             not record.success
-            or record.task != config.dataset.task
+            or record.task != config.dataset.task_for_episode(expected_index)
             or record.layout_id != expected_layout
             or record.trial_id != expected_trial
         ):

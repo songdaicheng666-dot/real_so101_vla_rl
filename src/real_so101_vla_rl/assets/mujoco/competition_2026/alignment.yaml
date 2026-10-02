@@ -1,0 +1,100 @@
+schema_version: 1
+alignment_id: so101_comp2026_overview_pnp8_v1
+created_from: current_follower_home_and_overview_2026-09-30
+
+input_provenance:
+  camera_profile:
+    file: configs/hardware/cameras/so101_competition_2026_exposure150.yaml
+    sha256: 2c2584348c109c2b0d56391e10c880436dd4cf2ce06da3a4ecadfc6e1839c5c7
+  camera_factory_calibration:
+    file: configs/hardware/cameras/calibration/orbbec_gemini2_AY6M8630105_factory.json
+    sha256: 8ae3694db6a15c83247a0792b5b140b053c6c3f48728025ea89345277615c5f1
+  follower_calibration:
+    file: datasets/so101_t0_100_lowlight_v1/project_meta/calibration.json
+    sha256: 45db12b1b454fe41146c6780eebce1a7a5aad4e79f631042821ffcb61d8dff70
+  recorded_robot_profile:
+    file: datasets/so101_t0_100_lowlight_v1/project_meta/robot_profile.json
+    sha256: bb0b6c79099d5fec2fe50b01d15ec4d9784698e16922bdb1a1ab27e95d654e78
+
+base:
+  position_m: [0.0, 0.035365, 0.0]
+  yaw_deg: 90.0
+  forward_foot_tangent_y_m: 0.100000
+  symmetry_axis_x_m: 0.0
+  tolerance_m: 0.0005
+
+robot:
+  joints: [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper]
+  current_real_home_deg_or_percent: [-7.2527472527, -104.0, 96.3076923077, 73.7142857143, -0.2197802198, 0.2032520325]
+  # physical reading minus MuJoCo angle; gripper uses the affine mapping below.
+  zero_offsets_deg: [-8.2239747127, -39.19670388, 23.2079378577, 6.8733618743, -39.8045545398, 0.0]
+  home_mujoco_deg: [0.97122746, -64.80329612, 73.09975445, 66.84092384, 39.58477432, -9.7764227642]
+  physical_ranges_deg_or_percent:
+    - [-120.1318681319, 120.1318681319]
+    - [-105.1428571429, 105.1428571429]
+    - [-97.4505494505, 97.4505494505]
+    - [-103.7802197802, 103.7802197802]
+    - [-180.0, 180.0]
+    - [0.0, 100.0]
+  # MuJoCo uses calibrated physical travel; offsets only transform readings.
+  mujoco_ranges_deg:
+    - [-120.1318681319, 120.1318681319]
+    - [-105.1428571429, 105.1428571429]
+    - [-97.4505494505, 97.4505494505]
+    - [-103.7802197802, 103.7802197802]
+    - [-180.0, 180.0]
+    - [-10.0, 100.0]
+  gripper_mapping:
+    physical_percent: [0.0, 100.0]
+    mujoco_deg: [-10.0, 100.0]
+
+overview_camera:
+  resolution: [640, 480]
+  sensorsize: [640.0, 480.0]
+  focalpixel: [518.459838867, 518.716552734]
+  principalpixel: [321.629577637, 236.771972656]
+  # OpenCV order: k1, k2, p1, p2, k3, k4, k5, k6.
+  # MuJoCo expects an offset from image center, unlike OpenCV's absolute point.
+  mujoco_principalpixel_offset: [1.629577637, -3.228027344]
+  distortion_opencv: [37.2808151245, -77.5903854370, -0.000328788592, -0.000479339942, 87.4668807983, 37.1524047852, -77.3209304810, 87.7057571411]
+  world_position_m: [-0.04593946, 0.30048764, 0.45857730]
+  world_quaternion_wxyz: [0.999962134, 0.005609083, 0.006641748, -0.000395198]
+  pnp:
+    method: opencv_solvepnp_iterative_planar
+    image_sha256: 2d486c1eaa661db49be5e2dc598a6d6326b9c273db2abd7f2cb67342420a7274
+    world_points_m:
+      - [-0.3251, 0.4500, 0.0]
+      - [-0.0251, 0.4500, 0.0]
+      - [-0.0251, 0.2000, 0.0]
+      - [-0.3251, 0.2000, 0.0]
+      - [0.0150, 0.3500, 0.0]
+      - [0.2150, 0.3500, 0.0]
+      - [0.2150, 0.2500, 0.0]
+      - [0.0150, 0.2500, 0.0]
+    refined_image_points_px:
+      - [16.5, 75.7]
+      - [351.9, 73.5]
+      - [352.3, 356.8]
+      - [14.7, 355.7]
+      - [397.5, 186.4]
+      - [625.2, 186.0]
+      - [626.0, 299.9]
+      - [397.8, 299.9]
+    mean_reprojection_error_px: 0.05
+    max_reprojection_error_px: 0.08
+
+lighting:
+  headlight_ambient: [0.31, 0.30, 0.28]
+  headlight_diffuse: [0.13, 0.12, 0.11]
+  key_position_m: [0.75, 0.55, 2.2]
+  key_diffuse: [0.58, 0.55, 0.50]
+  fill_diffuse: [0.22, 0.23, 0.25]
+  table_rgb: [0.72, 0.72, 0.70, 1.0]
+
+overview_sensor_model:
+  color_gain_rgb: [0.591, 0.592, 0.615]
+  color_bias_rgb: [0.0, 0.0, 0.0]
+  gamma: 1.0
+  vignette_strength: 0.20
+  blur_sigma_px: 0.55
+  noise_std_255: 0.8

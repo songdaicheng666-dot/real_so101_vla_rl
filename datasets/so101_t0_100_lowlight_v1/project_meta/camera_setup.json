@@ -1,0 +1,9 @@
+{
+  "camera_profile_file": "camera_profile.yaml",
+  "camera_profile_sha256": "2c2584348c109c2b0d56391e10c880436dd4cf2ce06da3a4ecadfc6e1839c5c7",
+  "factory_calibration_file": "orbbec_factory_calibration.json",
+  "factory_calibration_sha256": "8ae3694db6a15c83247a0792b5b140b053c6c3f48728025ea89345277615c5f1",
+  "installation_calibration_status": "uncalibrated",
+  "rig_id": "so101_competition_2026_dual_camera_mounted_exposure150_v3",
+  "schema_version": 1
+}

@@ -81,24 +81,24 @@
     <mesh maxhullvert="64" file="wrist_roll_follower_so101_gripper_part0_v1.stl"/>
     <mesh maxhullvert="64" file="moving_jaw_so101_gripper_part0_v1.stl"/>
     <mesh maxhullvert="64" file="moving_jaw_so101_gripper_part1_v1.stl"/>
-    <material name="base_motor_holder_so101_v1_material" rgba="1 0.82 0.12 1"/>
-    <material name="base_so101_v2_material" rgba="1 0.82 0.12 1"/>
+    <material name="base_motor_holder_so101_v1_material" rgba="0.94 0.93 0.88 1"/>
+    <material name="base_so101_v2_material" rgba="0.94 0.93 0.88 1"/>
     <material name="sts3215_03a_v1_material" rgba="0.1 0.1 0.1 1"/>
-    <material name="waveshare_mounting_plate_so101_v2_material" rgba="1 0.82 0.12 1"/>
-    <material name="motor_holder_so101_base_v1_material" rgba="1 0.82 0.12 1"/>
-    <material name="rotation_pitch_so101_v1_material" rgba="1 0.82 0.12 1"/>
-    <material name="upper_arm_so101_v1_material" rgba="1 0.82 0.12 1"/>
-    <material name="under_arm_so101_v1_material" rgba="1 0.82 0.12 1"/>
-    <material name="motor_holder_so101_wrist_v1_material" rgba="1 0.82 0.12 1"/>
+    <material name="waveshare_mounting_plate_so101_v2_material" rgba="0.94 0.93 0.88 1"/>
+    <material name="motor_holder_so101_base_v1_material" rgba="0.94 0.93 0.88 1"/>
+    <material name="rotation_pitch_so101_v1_material" rgba="0.94 0.93 0.88 1"/>
+    <material name="upper_arm_so101_v1_material" rgba="0.94 0.93 0.88 1"/>
+    <material name="under_arm_so101_v1_material" rgba="0.94 0.93 0.88 1"/>
+    <material name="motor_holder_so101_wrist_v1_material" rgba="0.94 0.93 0.88 1"/>
     <material name="sts3215_03a_no_horn_v1_material" rgba="0.1 0.1 0.1 1.0"/>
-    <material name="wrist_roll_pitch_so101_v2_material" rgba="1 0.82 0.12 1"/>
-    <material name="wrist_roll_follower_so101_v1_material" rgba="1 0.82 0.12 1"/>
-    <material name="moving_jaw_so101_v1_material" rgba="1 0.82 0.12 1"/>
+    <material name="wrist_roll_pitch_so101_v2_material" rgba="0.94 0.93 0.88 1"/>
+    <material name="wrist_roll_follower_so101_v1_material" rgba="0.94 0.93 0.88 1"/>
+    <material name="moving_jaw_so101_v1_material" rgba="0.94 0.93 0.88 1"/>
   </asset>
 
   <worldbody>
     <!-- Link base -->
-    <body name="base" pos="0 0 0" quat="0.70710678 0 0 0.70710678" childclass="so101">
+    <body name="base" pos="0 0.035365 0" quat="0.70710678 0 0 0.70710678" childclass="so101">
       <inertial pos="0.0137179 -5.19711e-05 0.0334843" mass="0.147"
         fullinertia="0.000114686 0.000136117 0.000130364 -4.59787e-07 4.97151e-06 9.75275e-08"/>
       <!-- Part base_motor_holder_so101_v1 -->
@@ -118,7 +118,7 @@
       <!-- Link shoulder -->
       <body name="shoulder" pos="0.0388353 0 0.0624" quat="0 0 -1 0">
         <!-- Joint from base to shoulder -->
-        <joint axis="0 0 1" name="shoulder_pan" type="hinge" range="-1.91986 1.91986" class="sts3215"/>
+        <joint axis="0 0 1" name="shoulder_pan" type="hinge" range="-2.0966966355 2.0966966355" class="sts3215"/>
         <inertial pos="-0.0307604 -1.7e-05 -0.0252713" mass="0.100006"
           fullinertia="8.3759e-05 8.10403e-05 2.39783e-05 7.55525e-08 -1.16342e-06 1.54663e-07"/>
         <!-- Part sts3215_03a_v1_2 -->
@@ -135,7 +135,7 @@
         <!-- Link upper_arm -->
         <body name="upper_arm" pos="-0.0303992 -0.0182778 -0.0542" quat="1 -1 -1 -1">
           <!-- Joint from shoulder to upper_arm -->
-          <joint axis="0 0 1" name="shoulder_lift" type="hinge" range="-1.7453293 1.7453293" class="sts3215"/>
+          <joint axis="0 0 1" name="shoulder_lift" type="hinge" range="-1.8350890421 1.8350890421" class="sts3215"/>
           <inertial pos="-0.089847 -0.008382 0.018409" mass="0.103"
             fullinertia="4.08002e-05 0.000147318 0.000142487 -1.97819e-05 -4.03016e-08 8.97326e-09"/>
           <!-- Part sts3215_03a_v1_3 -->
@@ -150,7 +150,7 @@
           <body name="lower_arm" pos="-0.11257 -0.028 0" quat="1 0 0 1">
             <!-- Joint from upper_arm to lower_arm -->
             <!-- Note: 5-degree calibration offset applied to joint range -->
-            <joint axis="0 0 1" name="elbow_flex" type="hinge" range="-1.69 1.69" class="sts3215"/>
+            <joint axis="0 0 1" name="elbow_flex" type="hinge" range="-1.7008329458 1.7008329458" class="sts3215"/>
             <inertial pos="-0.098070 0.0032438 0.018283" mass="0.104"
               fullinertia="2.87438e-05 0.000159844 0.00014529 7.41152e-06 1.26409e-06 -4.90188e-08"/>
             <!-- Part under_arm_so101_v1 -->
@@ -167,7 +167,7 @@
             <!-- Link wrist -->
             <body name="wrist" pos="-0.1349 0.0052 0" quat="1 0 0 -1">
               <!-- Joint from lower_arm to wrist -->
-              <joint axis="0 0 1" name="wrist_flex" type="hinge" range="-1.658063 1.658063" class="sts3215"/>
+              <joint axis="0 0 1" name="wrist_flex" type="hinge" range="-1.8113065336 1.8113065336" class="sts3215"/>
               <inertial pos="-0.000103312 -0.0386143 0.0281156" mass="0.079"
                 fullinertia="3.68263e-05 2.5391e-05 2.1e-05 1.7893e-08 -5.28128e-08 3.6412e-06"/>
               <!-- Part sts3215_03a_no_horn_v1 -->
@@ -181,7 +181,7 @@
               <!-- Link gripper -->
               <body name="gripper" pos="5.55112e-17 -0.0611 0.0181" quat="0.0172091 -0.0172091 0.706897 0.706897">
                 <!-- Joint from wrist to gripper -->
-                <joint axis="0 0 1" name="wrist_roll" type="hinge" range="-2.7438473 2.7438473" class="sts3215"/>
+                <joint axis="0 0 1" name="wrist_roll" type="hinge" range="-3.1415926536 3.1415926536" class="sts3215"/>
                 <inertial pos="0.000214 0.000245 -0.025187" mass="0.087"
                   fullinertia="2.75087e-05 4.33657e-05 3.45059e-05 -3.35241e-07 -5.7352e-06 -5.17847e-08"/>
                 <!-- Part sts3215_03a_v1_5 -->
@@ -267,11 +267,11 @@
   </worldbody>
 
   <actuator>
-    <position class="sts3215" name="shoulder_pan" joint="shoulder_pan" ctrlrange="-1.91986 1.91986"/>
-    <position class="sts3215" name="shoulder_lift" joint="shoulder_lift" ctrlrange="-1.74533 1.74533"/>
-    <position class="sts3215" name="elbow_flex" joint="elbow_flex" ctrlrange="-1.69 1.69"/>
-    <position class="sts3215" name="wrist_flex" joint="wrist_flex" ctrlrange="-1.65806 1.65806"/>
-    <position class="sts3215" name="wrist_roll" joint="wrist_roll" ctrlrange="-2.74385 2.84121"/>
-    <position class="sts3215" name="gripper" joint="gripper" ctrlrange="-0.17453 1.74533"/>
+    <position class="sts3215" name="shoulder_pan" joint="shoulder_pan" ctrlrange="-2.0966966355 2.0966966355"/>
+    <position class="sts3215" name="shoulder_lift" joint="shoulder_lift" ctrlrange="-1.8350890421 1.8350890421"/>
+    <position class="sts3215" name="elbow_flex" joint="elbow_flex" ctrlrange="-1.7008329458 1.7008329458"/>
+    <position class="sts3215" name="wrist_flex" joint="wrist_flex" ctrlrange="-1.8113065336 1.8113065336"/>
+    <position class="sts3215" name="wrist_roll" joint="wrist_roll" ctrlrange="-3.1415926536 3.1415926536"/>
+    <position class="sts3215" name="gripper" joint="gripper" ctrlrange="-0.1745329252 1.7453292520"/>
   </actuator>
 </mujoco>

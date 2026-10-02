@@ -1,4 +1,4 @@
-"""Interactively control SO101 and test AAA battery grasping in the T0 scene."""
+"""Interactively control SO101 and test battery-proxy cube grasping in T0."""
 
 from __future__ import annotations
 
@@ -170,7 +170,8 @@ def initialize_controls(model: mujoco.MjModel, data: mujoco.MjData) -> None:
 
 
 def reset_scene(model: mujoco.MjModel, data: mujoco.MjData) -> None:
-    mujoco.mj_resetData(model, data)
+    key_id = _object_id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
+    mujoco.mj_resetDataKeyframe(model, data, key_id)
     initialize_controls(model, data)
     mujoco.mj_forward(model, data)
 

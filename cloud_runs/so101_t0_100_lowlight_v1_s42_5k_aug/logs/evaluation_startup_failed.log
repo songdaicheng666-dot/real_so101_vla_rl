@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/root/autodl-tmp/releases/real_so101_vla_rl-t0-dee306a601ba/scripts/evaluate_openvla_oft_sft.py", line 10, in <module>
+    from real_so101_vla_rl.models import load_sft_config
+ModuleNotFoundError: No module named 'real_so101_vla_rl'

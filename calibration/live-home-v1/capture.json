@@ -1,0 +1,29 @@
+{
+  "capture_mode": "read_only",
+  "writes_goal_position": false,
+  "changes_torque": false,
+  "alignment_id": "so101_comp2026_overview_pnp8_v1",
+  "timestamp_utc_ns": 1790704594769252773,
+  "overview_timestamp_ns": 28747499183359,
+  "depth_timestamp_ns": 28747499183359,
+  "state_deg_or_percent": [
+    -7.252747252747253,
+    -104.0,
+    96.3076923076923,
+    73.71428571428571,
+    -0.21978021978021978,
+    0.20325203252032523
+  ],
+  "present_position_raw": {
+    "shoulder_pan": 1967,
+    "shoulder_lift": 844,
+    "elbow_flex": 3129,
+    "wrist_flex": 2872,
+    "wrist_roll": 2045,
+    "gripper": 1480
+  },
+  "camera_profile_sha256": "2c2584348c109c2b0d56391e10c880436dd4cf2ce06da3a4ecadfc6e1839c5c7",
+  "factory_calibration_sha256": "8ae3694db6a15c83247a0792b5b140b053c6c3f48728025ea89345277615c5f1",
+  "rgb_sha256": "d7633eaea133dd2d5ec8b6055021f9cd2b8672ce4a1fedec6a6aadbca290855e",
+  "depth_npy_sha256": "3d53ebecbd0c6d632b787db8844358a9fc881ba9a9963673e02278e971a80413"
+}

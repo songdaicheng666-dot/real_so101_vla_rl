@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import sys
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from importlib import metadata
 from pathlib import Path
@@ -25,6 +25,7 @@ from torch.utils.data import DataLoader
 from real_so101_vla_rl.data.openvla_oft import (
     OpenVLABatchCollator,
     create_openvla_oft_dataset,
+    image_transform_for_split,
 )
 from real_so101_vla_rl.models.losses import masked_action_l1
 from real_so101_vla_rl.models.sft_config import SFTConfig
@@ -222,16 +223,22 @@ def create_model_datasets(
     from prismatic.vla.action_tokenizer import ActionTokenizer
 
     action_tokenizer = ActionTokenizer(processor.tokenizer)
-    kwargs = {
-        "base_tokenizer": processor.tokenizer,
-        "action_tokenizer": action_tokenizer,
-        "image_transform": processor.image_processor.apply_transform,
-        "prompt_builder_fn": PurePromptBuilder,
-    }
-    return {
-        split: create_openvla_oft_dataset(config, split=split, **kwargs)
-        for split in ("train", "val", "test")
-    }
+    datasets = {}
+    for split in ("train", "val", "test"):
+        datasets[split] = create_openvla_oft_dataset(
+            config,
+            split=split,
+            base_tokenizer=processor.tokenizer,
+            action_tokenizer=action_tokenizer,
+            image_transform=image_transform_for_split(
+                processor.image_processor.apply_transform,
+                split=split,
+                image_augmentation=config.training.image_augmentation,
+                image_size=config.model.image_size,
+            ),
+            prompt_builder_fn=PurePromptBuilder,
+        )
+    return datasets
 
 
 def create_dataloaders(
@@ -395,25 +402,62 @@ class MetricsWriter:
     def __init__(self, output_dir: Path) -> None:
         self.jsonl_path = output_dir / "metrics.jsonl"
         self.csv_path = output_dir / "metrics.csv"
-        self._csv_file = self.csv_path.open("w", encoding="utf-8", newline="")
-        self._csv = csv.DictWriter(self._csv_file, fieldnames=self.fields)
-        self._csv.writeheader()
+        self._closed = False
 
     def write(self, metrics: Mapping[str, Any]) -> None:
+        if self._closed:
+            raise RuntimeError("Cannot write to a closed MetricsWriter")
         row = {field: metrics.get(field) for field in self.fields}
         with self.jsonl_path.open("a", encoding="utf-8") as output:
             output.write(json.dumps(row, sort_keys=True) + "\n")
-        self._csv.writerow(row)
-        self._csv_file.flush()
 
     def close(self) -> None:
-        self._csv_file.close()
+        if self._closed:
+            return
+        metrics_jsonl_to_csv(
+            self.jsonl_path,
+            self.csv_path,
+            fields=self.fields,
+        )
+        self._closed = True
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *args: object) -> None:
         self.close()
+
+
+def metrics_jsonl_to_csv(
+    jsonl_path: str | Path,
+    csv_path: str | Path,
+    *,
+    fields: Sequence[str] = MetricsWriter.fields,
+) -> None:
+    """Deterministically render the canonical JSONL metrics as a CSV table."""
+
+    rows = []
+    path = Path(jsonl_path)
+    if path.exists():
+        with path.open(encoding="utf-8") as source:
+            for line_number, line in enumerate(source, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    value = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"Invalid metrics JSON on line {line_number}: {exc}"
+                    ) from exc
+                if not isinstance(value, dict):
+                    raise TypeError(
+                        f"Metrics line {line_number} must be a JSON object"
+                    )
+                rows.append({field: value.get(field) for field in fields})
+    with Path(csv_path).open("w", encoding="utf-8", newline="") as output:
+        writer = csv.DictWriter(output, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def save_loss_curve(
@@ -469,7 +513,7 @@ def save_loss_curve(
         y = point((1, value))[1]
         draw.line((left - 5, y, left, y), fill="black", width=1)
         draw.text((8, y - 7), f"{value:.4f}", fill="black")
-    draw.text((left, 18), "SO-101 synthetic OpenVLA-OFT masked L1", fill="black")
+    draw.text((left, 18), "SO-101 OpenVLA-OFT masked L1", fill="black")
     draw.text((width // 2 - 20, height - 35), "step", fill="black")
     draw.text((left, height - 62), "1", fill="black")
     draw.text((left + plot_width - 20, height - 62), str(max_step), fill="black")
@@ -573,6 +617,13 @@ def build_run_manifest(
         "source_archive_sha256": os.environ.get(
             "REAL_SO101_SOURCE_ARCHIVE_SHA256"
         ),
+        "dataset_artifact": {
+            "root": config.dataset.root,
+            "sha256": os.environ.get("REAL_SO101_DATASET_SHA256"),
+            "sha256_algorithm": "sorted_sha256sum_lines_v1",
+            "file_count": os.environ.get("REAL_SO101_DATASET_FILE_COUNT"),
+            "bytes": os.environ.get("REAL_SO101_DATASET_BYTES"),
+        },
         "python": platform.python_version(),
         "platform": platform.platform(),
         "torch": torch.__version__,

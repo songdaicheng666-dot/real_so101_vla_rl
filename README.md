@@ -2,7 +2,13 @@
 
 ## 总览
 
-本项目使用 SO-101 实体机械臂完成多色方块识别、抓取和顺序放置任务。由于实物条件限制，真机录制和 OpenVLA 训练统一使用红、黄、蓝、绿四个方块。当前已经完成 schema v2 双 RGB/对齐深度数据契约、LeRobotDataset → OpenVLA-OFT 适配器、云端真实模型联调和 2026 挑战赛 MuJoCo 双任务场景。MuJoCo `basic_t0` 仍使用已验证的 AAA 电池资产，这是明确记录的 sim-to-real 形状差异。实体双相机已冻结身份与流配置；历史 v2 profile 使用腕部手动曝光 `300`，低照度 pilot 的 v3 profile 使用曝光 `150`、增益 `0`。此前 10 秒正式预检实测 `300/300` 帧有效、`29.92 FPS`、p95 时间差 `21.40 ms`，已通过 `25 ms` 合同。
+本项目使用 SO-101 实体机械臂完成多色方块识别、抓取和顺序放置任务。由于实物条件限制，真机录制和 OpenVLA 训练统一使用红、黄、蓝、绿四个方块；MuJoCo 双任务场景也已改为相同的电池代理外形与物理规格：边长 `20 mm`、净质量 `0.096 kg`。当前已经完成 schema v2 双 RGB/对齐深度数据契约、LeRobotDataset → OpenVLA-OFT 适配器、云端真实模型联调和 2026 挑战赛 MuJoCo 双任务场景。实体双相机已冻结身份与流配置；历史 v2 profile 使用腕部手动曝光 `300`，低照度 pilot 的 v3 profile 使用曝光 `150`、增益 `0`。此前 10 秒正式预检实测 `300/300` 帧有效、`29.92 FPS`、p95 时间差 `21.40 ms`，已通过 `25 ms` 合同。
+
+20 条单色低照度 pilot、T0 四色 100 条正式数据采集和 5,000-step
+OpenVLA-OFT SFT 均已完成。正式数据包含红、黄、蓝、绿各 25 条成功示范，
+增强离线评估与 11 项自动验收全部通过。当前优先任务是冻结最佳验证
+checkpoint，并在人工监护下建立统一的真机 SFT 基线；离线 MAE 不能替代
+真实抓取成功率。
 
 ```mermaid
 flowchart TD
@@ -12,18 +18,19 @@ flowchart TD
     D --> E["模拟 LeRobotDataset v3<br/>已完成"]:::done
     E --> F["A100 真实 OpenVLA-OFT<br/>前向、LoRA、200-step SFT、checkpoint 恢复<br/>已完成"]:::done
 
-    B --> S["2026 挑战赛 MuJoCo 双任务基础场景<br/>SO101 + AAA 电池动力学<br/>T0 人工抓取已验证"]:::done
+    B --> S["2026 挑战赛 MuJoCo 双任务基础场景<br/>SO101 + 20 mm / 0.096 kg 方块动力学<br/>自动加载与稳定性验证"]:::done
     S --> SRL["Basic T0 低维状态 RL baseline<br/>PPO + 完整轨迹 GRPO<br/>训练/评估/checkpoint 已打通"]:::done
 
-    B --> G["leader/follower 身份、标定与静态保持<br/>已通过；低速遥操待验收"]:::next
-    G --> H["固定 RGB-D 安装、RGB/depth 同步与标定<br/>下一步"]:::next
+    B --> G["leader/follower 身份、标定、静态保持与低速遥操<br/>已完成"]:::done
+    G --> H["固定 RGB-D 安装、RGB/depth 同步与标定<br/>已完成"]:::done
     C --> I["项目真机录制入口<br/>双相机10秒同步预检已通过"]:::done
     H --> I
     F --> I
-    I --> J["小规模真机示范采集与质量检查"]:::planned
-    J --> K["真实数据适配、单 batch 前向与小数据过拟合"]:::planned
-    K --> L["扩大真机数据集并完成 OpenVLA-OFT SFT"]:::planned
-    L --> M["冻结共同 SFT checkpoint 与真机评估基线"]:::planned
+    I --> J["小规模真机示范采集与质量检查<br/>已完成"]:::done
+    J --> K["真实数据适配与小数据 SFT 验证<br/>已完成"]:::done
+    K --> L["T0 四色 100 条规模化采集与定稿<br/>已完成"]:::done
+    L --> L2["正式数据 5,000-step OpenVLA-OFT SFT<br/>离线验收已通过"]:::done
+    L2 --> M["冻结最佳 SFT checkpoint 与真机评估基线<br/>当前阶段"]:::next
 
     M --> R1["路线 A：仅真机 RL<br/>真机环境、真机 rollout、真机更新"]:::routeA
     M --> R2["路线 B：真机 + 仿真混合 RL<br/>任务/RL 接口、仿真 RL、真机 RL 校正"]:::routeB
@@ -33,7 +40,7 @@ flowchart TD
     MA --> N["相同真机测试集、初始状态、任务与安全约束<br/>统一评估并比较两条路线"]:::planned
     MB --> N
     N --> O["选择最终策略并回流失败数据"]:::planned
-    O --> L
+    O --> L2
     O --> P["比赛任务调度器、推理服务与安全部署"]:::planned
     P --> Q["完整比赛流程与正式验收"]:::planned
 
@@ -498,7 +505,7 @@ README 开头的总览图是项目当前的完整依赖关系。后续开发必�
 - [x] 使用 LoRA rank 32 完成第一轮模拟数据微调及 checkpoint 保存、恢复和前向复验。
 - [x] 逐 optimizer step 记录训练损失、验证损失、学习率、梯度范数和检查点。
 - [x] 导出 LoRA adapter、action head、proprio projector、processor 和归一化统计。
-- [ ] 在固定测试集上评估颜色条件、动作误差和不同子任务表现。
+- [x] 在正式固定测试集上评估总体、各颜色、各关节和各预测步动作误差，并输出物理单位 MAE。
 - [x] 确认独立模拟 test split 可以完成磁盘读取、模型前向和 masked L1 计算。
 - [ ] 将模型接入 follower，以低速、短 action chunk 和人工监护完成首次闭环 rollout。
 - [ ] 收集抓错、抓偏、早放、放置偏移和停滞等 SFT 失败案例。
@@ -545,12 +552,13 @@ README 开头的总览图是项目当前的完整依赖关系。后续开发必�
 - [ ] **路线 A：仅真机 RL**。只使用真实 SO-101 rollout 和真机奖励更新策略，先打通单块 `T0`，再扩展到 `P1`～`P3` 和三块序列任务。
 - [ ] 路线 A 将逐步训练、rollout 和评估记录写入 `runs/rl/real_only/<run_id>/metrics.jsonl`。
 - [ ] **路线 B：真机 + 仿真混合 RL**。将 SO-101 仿真环境接入相同 rollout 接口，先进行仿真 RL，再使用真机 rollout 校正；混合比例和阶段切换由配置控制。
-- [x] 在 MuJoCo 中加入 SO-101 完整动力学模型、夹爪、正确关节约束、两张比赛底图和四节动态 AAA 电池，并建立 `basic_t0` 与 `sequence_p1_p2_p3` 两个可加载场景。
-- [x] 使用 T0 交互 Demo 人工控制六个舵机，完成蓝色 AAA 电池的双侧夹持和抬升，验证执行器、夹爪碰撞、电池接触与自由刚体动力学基本可用。
-- [x] 为 `basic_t0` 实现电池完整投影入区判定、轻量随机复位、特权状态观测、分阶段奖励、成功/失败终止和 Gymnasium 环境封装。
+- [x] 在 MuJoCo 中加入 SO-101 完整动力学模型、夹爪、正确关节约束、两张比赛底图和四个边长 `20 mm`、质量 `0.096 kg` 的动态彩色方块，并建立 `basic_t0` 与 `sequence_p1_p2_p3` 两个可加载场景。
+- [x] 历史上曾使用 T0 交互 Demo 完成旧蓝色 AAA 模型的双侧夹持和抬升；该结果仅保留为执行器与控制链路的历史证据。
+- [ ] 使用当前方块模型重新完成 T0 双侧夹持和抬升人工回归，验证增加后的质量与方块接触参数。
+- [x] 为 `basic_t0` 实现方块完整投影入区判定、轻量随机复位、特权状态观测、分阶段奖励、成功/失败终止和 Gymnasium 环境封装。
 - [x] 实现连续 `[8, 6]` action chunk 的 Squashed Gaussian MLP、PPO、完整轨迹 GRPO、同步环境采集、固定 reset 评估、JSONL 指标和 checkpoint 恢复。
 - [ ] 为 `sequence_p1_p2_p3` 实现独立任务环境、顺序状态和内/外框奖励判定。
-- [ ] 让仿真观测、动作、奖励事件和终止原因与公共真机接口一致，并随机化颜色排列、电池位姿、相机误差、光照和动力学参数。
+- [ ] 让仿真观测、动作、奖励事件和终止原因与公共真机接口一致，并随机化颜色排列、方块位姿、相机误差、光照和动力学参数。
 - [ ] 使用脚本策略和已知成功/失败轨迹验证仿真奖励，在开始混合更新前测量仿真与真机事件分布的差距。
 - [ ] 路线 B 将逐步训练、rollout 和评估记录写入 `runs/rl/hybrid/<run_id>/metrics.jsonl`，每条记录标明数据来自 `sim` 或 `real`。
 - [ ] 两条路线使用相同的真机交互回合预算；混合路线可以使用额外仿真回合，但必须单独统计，避免掩盖真实数据成本。
@@ -619,22 +627,24 @@ M0 的任务、数据和训练接口已完成首版定义，M3 的模拟训练�
 
 ### 3.6 当前进度摘要
 
-更新时间：2026-09-19。
+更新时间：2026-10-02。
 
 | 工作方向 | 当前状态 | 已获得的验证结果 | 下一步 |
 | --- | --- | --- | --- |
 | 项目结构与上游边界 | 已完成 | 项目代码使用独立 `src` 包；`RLinf/` 和 `SimpleVLA-RL/` 未被修改并继续忽略 | 按具体功能迁移所需的最小思路或代码 |
-| SO-101 数据定义 | schema v2 已完成 | 六维状态/绝对关节目标、30 Hz、overview+wrist 双 RGB、overview 对齐毫米深度、逐传感器时间戳和有效位均有严格校验 | 用真机轨迹检查数值分布、同步和夹爪实际方向 |
-| 真机同步录制 | 10条静态诊断 episode 已完成 | `2394` 帧、零 capture abort；同步 p95 `23.73 ms`、最大 `25.00 ms`；双 RGB、无损深度、状态、实际动作和指令均可通过 LeRobotDataset 重开并进入 OpenVLA adapter | 完成低速遥操、任务示范和10分钟 soak test |
-| 数据划分与归一化 | 已完成首版 | 成功 episode 筛选、按布局分组的 train/val/test、训练集指纹和 `BOUNDS_Q99` 已有测试 | 用真机训练集重新计算统计量 |
-| LeRobot → OpenVLA-OFT 适配 | 已完成模拟数据验收 | 磁盘数据读取、8 步动作窗口、prompt/token、图像处理、batch collator 和 masked L1 均已打通 | 输入第一批真实 LeRobotDataset 复验 |
-| 云端训练环境 | 已完成 | A100 40 GB 上离线加载真实 OpenVLA、运行真实 processor、前向、LoRA 反向和 checkpoint 恢复 | 固化云端启动脚本和真实训练数据同步方式 |
-| OpenVLA-OFT SFT | 模拟全链路已完成 | 200-step loss 明显下降并进入低位平台；最终 checkpoint 可以重新加载和前向 | 采集约 10 条真机试验轨迹并做短程过拟合 |
-| MuJoCo 基础任务场景 | 已完成并通过 T0 人工抓取 | 两张比赛底图、SO101 六轴动力学、四节自由 AAA 电池、相机和交互 Demo 已集成；蓝色电池已实现双侧夹持并抬升 10 mm 以上 | 单独验收序列场景操作路径 |
+| SO-101 数据定义 | schema v2 与正式数据合同已冻结 | 六维状态/绝对关节目标、30 Hz、overview+wrist 双 RGB、overview 对齐毫米深度、逐传感器时间戳和有效位均已通过正式数据定稿 | 新任务或传感器条件变化时建立新版本，不改写历史合同 |
+| 真机同步录制 | 100 条正式 T0 示范已完成 | 四色各 25 条、共 46,909 帧；100 次人工接受，8 次人工丢弃未入集，正式定稿通过 | 后续按独立版本采集实机评估与失败回流数据 |
+| 数据划分与归一化 | 正式数据已定稿 | 100 条成功 T0 示范按颜色分层为 80/8/12；每色 20/2/3，归一化只使用 train split，数据指纹已冻结 | 后续新任务或光照条件使用新数据集版本，不改写本轮数据 |
+| LeRobot → OpenVLA-OFT 适配 | 已通过正式真机数据验收 | 46,909 帧真实数据完成磁盘读取、8 步动作窗口、双 RGB、proprio、batch collator 和 masked L1 验证 | 在真机闭环前复核推理端反归一化和动作限幅 |
+| 云端训练环境 | 正式训练已完成 | A100 40 GB 完成 5,000-step SFT、10 次验证、10 个 checkpoint、增强评估和自动验收 | 保留云端 checkpoint，并冻结最佳权重的运行身份 |
+| OpenVLA-OFT SFT | 100 条正式数据离线验收通过 | 最佳 checkpoint 为 step 4500，val loss `0.057623`；测试集总体归一化 MAE `0.058871`，11 项验收全部通过 | 使用最佳 checkpoint 开展低速、短 chunk、人工监护的真机基线评估 |
+| MuJoCo 基础任务场景 | 方块模型已集成并通过自动检查 | 两张比赛底图、SO101 六轴动力学、四个 `20 mm` / `0.096 kg` 自由方块、相机和交互 Demo 已集成；旧 AAA 的人工抓取证据已明确标为历史记录 | 用当前方块重新完成 T0 人工抓取，并单独验收序列场景 |
 | 真机闭环与安全层 | 静态连接安全已验证 | follower 连接前会用当前位置覆盖残留目标，标定不匹配时拒绝连接；3秒位置保持无漂移 | 完成可达性、安全限幅和低速 rollout |
 | 统一 RL 环境与双路线对照 | Basic T0 MLP baseline 已完成工程链路 | 特权状态 Gymnasium 环境、连续 PPO/GRPO、轨迹采集、评估、metrics 和 checkpoint 已通过 smoke 验证 | 训练并审查 T0 策略行为，接入视觉 VLA 和序列任务 |
 
-模拟数据通过只能证明软件链路能够训练和保存模型，不能证明模型已经学会真实抓取。当前项目已经跨过“数据能否进入模型、loss 能否反向传播、checkpoint 能否恢复”的工程验证阶段，下一项关键工作是真机数据采集。
+正式真机数据已经能够稳定进入模型并完成训练、checkpoint 选择和增强离线评估；
+这仍不能证明模型已经具备真实抓取成功率。下一项关键工作是冻结 step 4500
+候选权重，并按统一安全协议完成真机 SFT baseline 评估。
 
 ### 3.7 SFT 后的双路线 RL 对照设计
 
@@ -840,8 +850,8 @@ images/observation.images.overview_depth/episode-000000/frame-000000.tiff
 本机预览位于以下被 `.gitignore` 忽略的验收目录：
 
 ```text
-artifacts/synthetic_dataset_preview/so101_synthetic_6episodes.mp4
-artifacts/synthetic_dataset_preview/episode_contact_sheet.png
+captures/synthetic_dataset_preview/so101_synthetic_6episodes.mp4
+captures/synthetic_dataset_preview/episode_contact_sheet.png
 ```
 
 #### 训练配置与结果
@@ -875,7 +885,7 @@ artifacts/synthetic_dataset_preview/episode_contact_sheet.png
 本机拉回的验收文件位于：
 
 ```text
-artifacts/cloud_runs/so101_synthetic_overfit_v1/
+cloud_runs/so101_synthetic_overfit_v1/
 ├── metrics.jsonl
 ├── metrics.csv
 ├── loss_curve.png
@@ -985,17 +995,15 @@ peak GPU memory:   15.91 GiB
 /root/autodl-tmp/runs/so101_real_pilot_lowlight_v2
 ```
 
-完整结果已经拉回本机被 `.gitignore` 忽略的目录，包含两个 checkpoint：
+精简验收结果已经拉回本机公开目录；完整 checkpoint 仍保留在云端：
 
 ```text
-artifacts/cloud_runs/so101_real_pilot_lowlight_v2/
+cloud_runs/so101_real_pilot_lowlight_v2/
 ├── acceptance_report.json
 ├── metrics.jsonl
 ├── metrics.csv
 ├── loss_curve.png
-├── run_manifest.json
-├── checkpoint-000100/
-└── checkpoint-000200/
+└── run_manifest.json
 ```
 
 本次可复现身份为：源码归档 SHA-256
@@ -1007,18 +1015,158 @@ artifacts/cloud_runs/so101_real_pilot_lowlight_v2/
 原始逐步结果以 `metrics.jsonl` 和 `metrics.csv` 为准，`loss_curve.png`
 用于快速查看 train、平滑 train 与 validation 曲线。
 
-### 4.6 MuJoCo 双任务场景与抓取验证
+### 4.6 T0 四色 100 条正式数据 → OpenVLA-OFT SFT 与增强评估
 
-项目已经建立 `basic_t0` 和 `sequence_p1_p2_p3` 两个 MuJoCo 场景。两个入口场景共享比赛坐标适配后的 SO101 Menagerie 动力学模型，以及红、黄、蓝、绿四节 AAA 自由刚体电池；场景同时包含底板碰撞层、无碰撞底图纹理、Free/俯视/腕部相机和灯光。详细资产结构、尺寸与操作方法见 [`competition_2026/README.md`](src/real_so101_vla_rl/assets/mujoco/competition_2026/README.md)。
+#### 正式数据集
 
-使用 `scripts/demo_mujoco_t0_grasp.py` 进行人工验证时，已经在 `basic_t0` 场景中控制机械臂接近蓝色电池，使电池同时接触固定夹爪和活动夹爪，并将其抬升至初始位置 10 mm 以上。截图左侧显示蓝色电池处于夹爪之间并离开底板，右侧终端同时给出“双侧接触”“抬升”和“成功”诊断：
+正式训练使用 `so101_t0_100_lowlight_v1`。它不是把上一节的 20 条 pilot
+继续追加到 100 条，而是在同一套 schema v2 录制合同下建立的独立冻结数据集。
+任务统一为“拿起指定颜色方块并放入 `T0`”，但目标颜色覆盖红、黄、蓝、绿
+四种类别，每色恰好 25 条成功示范。录制计划由 seed 42 确定性生成，每个
+20 条录制分段内每色各 5 条，避免录制顺序长期偏向某一种颜色。
 
-![MuJoCo T0 场景中 SO101 双侧夹持并抬升蓝色 AAA 电池的人工验收截图](src/real_so101_vla_rl/assets/mujoco/competition_2026/evidence/t0_manual_grasp_validation.png)
+100 条成功 episode 共包含 46,909 帧，使用 30 FPS、overview 与 wrist 双 RGB、
+overview 对齐毫米深度、六维关节状态和实际下发的六维绝对关节目标。腕部相机
+沿用低照度曝光 `150`、增益 `0`。OpenVLA-OFT 训练实际读取双 RGB 与
+proprioception；对齐深度被保留在数据契约中，但不作为本轮 OpenVLA 输入。
+每条示范使用唯一的 `layout_id`，录制前重新随机摆放四个方块，不复现固定坐标。
+除 100 次人工确认接受外，另有 8 次 `operator_discarded` 尝试仅保留在
+`attempts.jsonl`，没有进入 SFT 数据。
 
-这次验证证明机械臂位置执行器、夹爪碰撞体、电池自由关节和接触动力学已经能够组成基本抓取链路。它尚不证明自动策略、T0 放置、P1～P3 顺序放置或 sim-to-real 效果。
+正式定稿验证全部帧的有效位、有限数值、25 ms 同步上限和抽样视频解码，并按
+`t0_color_stratified_v1` 生成 80/8/12 的 train/validation/test 划分；每种
+颜色分别贡献 20/2/3 条，layout 不跨 split。q01/q99 归一化统计只由 80 条
+train episode 计算。同步到云端的冻结数据产物包含 79 个文件、
+`4,080,796,024` 字节，组合 SHA-256 为
+`57a347891fea3dd3c45409b62b1a79c1bef55ab4467712ddcc98994c60ea99f5`。
+
+#### 与 20 条 Pilot 的区别
+
+上一节实验的目标是用最小真实数据打通工程链路；本节则是第一轮可用于选择
+真机 SFT baseline 候选权重的正式离线训练。两者边界如下：
+
+| 对比项 | 20 条低照度 Pilot | 100 条正式数据 |
+| --- | --- | --- |
+| 实验目的 | 验证真实数据能否训练、保存并重载 | 在冻结数据和固定测试集上训练并选择正式候选权重 |
+| 数据规模 | 20 episode，13,976 帧 | 100 episode，46,909 帧；另有 8 次人工丢弃未入集 |
+| 颜色与任务 | 仅蓝色方块到 `T0` | 红、黄、蓝、绿各 25 条，均放入 `T0` |
+| 划分 | 16/2/2，按 layout 分组 | 80/8/12，按颜色分层且每色为 20/2/3 |
+| 训练长度 | 200 step | 5,000 step |
+| 图像增强 | 关闭 | 仅 train split 使用随机裁剪与颜色增强，val/test 保持确定性 |
+| checkpoint | step 100、200 | 每 500 step 保存，共 10 个，按最低有限 val loss 自动选优 |
+| 离线评估 | 最终 val/test loss 与重载前向 | 总体、颜色、关节、预测步 MAE，物理单位 MAE 与 11 项自动验收 |
+| 本地产物 | 当时连同两个 checkpoint 拉回 | 仅保留配置、指标、曲线、日志和报告；checkpoint 留在云端 |
+
+两批数据都只覆盖单块放入 `T0`，正式集增加的是颜色覆盖、布局随机性和样本量，
+仍不包含 `P1`～`P3` 顺序放置、失败恢复或策略闭环数据。
+
+#### Preflight 与正式训练配置
+
+训练前 preflight 在真实 batch 上得到有限 L1 loss `0.73828125`，输出形状为
+`[2,8,6]`，峰值 GPU 显存 15.94 GiB，无 OOM。正式训练在 A100 40 GB 上
+使用 BF16、gradient checkpointing、batch size 2、gradient accumulation 1、
+AdamW、学习率 `5e-4`、cosine scheduler 和 150-step warmup；LoRA 使用
+rank 32、alpha 16。训练共运行 5,000 个 optimizer step，每 500 step 完成
+一次 validation 并保存 checkpoint，10 个 checkpoint 全部保留。
+
+训练集独占的图像增强遵循 OpenVLA-OFT 风格，包含随机裁剪和颜色扰动；
+validation 与 test 不使用随机增强。这样既增加正式训练对轻微视角和低照度变化
+的鲁棒性，又保证 checkpoint 选择和测试指标可以确定性复现。
+
+#### 训练曲线与 checkpoint 选择
+
+![SO-101 T0 四色 100 条正式数据的 5,000-step OpenVLA-OFT SFT loss 曲线](cloud_runs/so101_t0_100_lowlight_v1_s42_5k_aug/loss_curve.png)
+
+训练 loss 总体持续下降，前 100 step 均值为 `0.68324219`，最后 100 step
+均值为 `0.04321167`，后者约为前者的 6.32%。最终单步 train loss 为
+`0.02404785`，最终平滑 train loss 为 `0.03917236`。训练耗时
+`13,037.75` 秒（约 3 小时 37 分 18 秒），峰值 GPU 显存 18.36 GiB。
+
+validation loss 从 step 500 的 `0.22597591` 降到 step 4500 的最低值
+`0.05762343`，step 5000 略回升至 `0.05785920`。因此增强评估按预定规则选择
+较优的 `checkpoint-004500`，而不是机械地使用最终 checkpoint。训练器在
+`checkpoint-005000` 上记录的最终 test loss 为 `0.05846493`。
+
+| Step | Val loss | Step | Val loss |
+| ---: | ---: | ---: | ---: |
+| 500 | 0.22597591 | 3,000 | 0.08269874 |
+| 1,000 | 0.18792261 | 3,500 | 0.07718039 |
+| 1,500 | 0.14603387 | 4,000 | 0.05967343 |
+| 2,000 | 0.11605549 | 4,500 | **0.05762343** |
+| 2,500 | 0.11053694 | 5,000 | 0.05785920 |
+
+#### 增强离线评估与验收结果
+
+最佳 checkpoint 在完整 test split 的 12 个 episode、5,676 帧上完成评估。
+padding 被排除，所有结果按绝对误差总和除以有效元素数聚合；模型实际输出形状
+为 `[2,8,6]`。总体归一化 MAE 为 `0.05887106`，覆盖 270,432 个有效动作
+元素。分颜色结果如下：
+
+| 目标颜色 | 归一化 MAE |
+| --- | ---: |
+| green | 0.05331559 |
+| yellow | 0.05775582 |
+| red | 0.06074050 |
+| blue | 0.06320731 |
+
+反归一化后的各关节物理单位 MAE 为：
+
+| 关节 | MAE | 单位 |
+| --- | ---: | --- |
+| shoulder_pan | 1.6754 | degree |
+| shoulder_lift | 3.4517 | degree |
+| elbow_flex | 3.2549 | degree |
+| wrist_flex | 1.8737 | degree |
+| wrist_roll | 2.1009 | degree |
+| gripper | 1.8037 | LeRobot 0–100 范围 |
+
+归一化误差随预测步从 horizon 0 的 `0.04554860` 增加到 horizon 7 的
+`0.07367611`，说明远期动作预测仍比近期动作困难。夹爪的归一化 MAE
+`0.10740669` 是六个动作维度中最高的一项，因此实机测试应重点观察抓取时机、
+闭合程度和释放时机，而不能只看机械臂五个角度关节。
+
+`acceptance_report.json` 的 11 项检查全部通过：5,000 条训练 step 连续且有限，
+10 次 validation 与 10 个 checkpoint 完整，最后 100 step loss 低于最初
+100 step，增强评估的 49 个聚合项均完整有限，checkpoint 重载输出形状正确，
+训练统计、80/8/12 划分以及源码和数据指纹一致。
+
+#### 产物与结论边界
+
+最佳与最终 checkpoint 仍保留在云端：
+
+```text
+/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/checkpoint-004500
+目录树 SHA-256: efb1dd7786cd0d17564d7df615ed00c36719e0b639a9e6101c788d9ac6404bcf
+
+/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/checkpoint-005000
+目录树 SHA-256: d946688892a90708614c4773921218af89fd481a5d7577d3e3bc46c1fa0fb4f9
+```
+
+本地 `cloud_runs/so101_t0_100_lowlight_v1_s42_5k_aug/` 只保存正式配置、
+run manifest、metrics、loss 曲线、日志、`evaluation_report.json` 和
+`acceptance_report.json`，没有下载 checkpoint。源码归档 SHA-256 为
+`dee306a601ba2b3e3a63e45f0da1878c8e2c2cefbcf9916bc37b8def74a92b66`，
+源码树 SHA-256 为
+`c7f0ade9b6296acfae442bc405e2b7916bd948d70579948db363b7503d08f459`。
+
+这轮结果证明正式四色真机数据可以稳定完成 SFT、自动选优、checkpoint 重载和
+增强离线评估，并支持把 step 4500 作为下一阶段真机 baseline 的候选权重。
+它尚不能证明真实抓取或放置成功率，也不能证明 `P1`～`P3` 序列任务能力；
+这些结论必须来自后续统一协议下的机器人实机评估。
+
+### 4.7 MuJoCo 双任务场景与抓取验证
+
+项目已经建立 `basic_t0` 和 `sequence_p1_p2_p3` 两个 MuJoCo 场景。两个入口场景共享比赛坐标适配后的 SO101 Menagerie 动力学模型，以及红、黄、蓝、绿四个边长 `20 mm`、质量 `0.096 kg` 的自由刚体方块；场景同时包含底板碰撞层、无碰撞底图纹理、Free/俯视/腕部相机和灯光。详细资产结构、尺寸与操作方法见 [`competition_2026/README.md`](src/real_so101_vla_rl/assets/mujoco/competition_2026/README.md)。
+
+以下截图来自替换方块前的旧 AAA 圆柱模型人工验证：当时在 `basic_t0` 中使蓝色模型同时接触固定夹爪和活动夹爪，并将其抬升至初始位置 10 mm 以上。
+
+![MuJoCo T0 场景中 SO101 双侧夹持并抬升旧蓝色 AAA 模型的历史截图](src/real_so101_vla_rl/assets/mujoco/competition_2026/evidence/t0_manual_grasp_validation.png)
+
+该记录证明旧模型下的位置执行器、夹爪碰撞体与自由关节能够组成基本抓取链路，但不验证当前质量更大的方块接触模型。当前方块仍需使用 `scripts/demo_mujoco_t0_grasp.py` 重新完成人工双侧夹持和抬升回归。
+无论旧、新模型，该检查都不证明自动策略、T0 放置、P1～P3 顺序放置或 sim-to-real 效果。
 
 在该场景上，项目已进一步实现 `SO101BasicT0Env`。当前 MLP baseline
-读取 92 维低维特权状态，包括机械臂关节、TCP、四节电池位姿/速度、目标颜色、
+读取 92 维低维特权状态，包括机械臂关节、TCP、四个方块位姿/速度、目标颜色、
 T0 相对几何和接触状态；这不等同于只输入 proprioception。策略输出与
 OpenVLA-OFT 数据契约一致的 `[8, 6]` 连续绝对关节目标。奖励保留靠近、双侧夹持、
 抬升、搬运、完整入区、释放、稳定成功和失败原因的独立分项。
@@ -1043,7 +1191,7 @@ conda run --no-capture-output -n lerobot \
 `--smoke` 只用两次短更新验证工程链路，不代表策略已学会抓取或放置。
 完整配置、恢复和评估命令见 [`configs/rl/README.md`](configs/rl/README.md)。
 
-### 4.7 实机同步录制软件层
+### 4.8 实机同步录制软件层
 
 当前 LeRobot `lerobot_record.py` 先计算 `robot_action_to_send`，再调用 `robot.send_action()`，但写入数据集的仍是 `act_processed_teleop`。当 teleop processor 和 robot processor 都是 identity，并且 follower 的安全裁剪未触发时，两者相同；一旦 robot processor 改写动作或 `max_relative_target` 触发裁剪，记录动作就可能不同于最终下发动作。
 
@@ -1059,9 +1207,9 @@ conda run --no-capture-output -n lerobot \
 
 leader/follower 已通过 USB 序列号分别冻结为 `5B79049969` 和 `5B79050068`，并与 `my_leader_arm.json`、`my_follower_arm.json` 的六舵机标定逐项完全匹配。录制入口不再直接调用上游 follower 的普通连接流程：它会在扭矩关闭时先读取当前位置、写入相同的 `Goal_Position`，验证成功后才配置并使能位置保持，从而避免舵机追逐断电前残留的旧目标。真实机械臂静态测试连续读取90次且六关节无观测漂移，测试期间没有调用 `send_action()`，结束后已关闭扭矩。
 
-独立诊断数据集 `artifacts/datasets/so101_static_validation_v2` 已按正式采集路径录制10条8秒 episode，共 `2394` 帧且没有 capture abort。四路有效位全部为真，host 时间跨度平均 `14.79 ms`、p95 `23.73 ms`、最大 `24.999551 ms`，没有帧超过 `25 ms` 合同。两路 MP4 均可完整解码2394帧；2394张深度图全部是 `uint16[480,640]` TIFF，范围为 `0～1605 mm`。LeRobotDataset 合同、8步 action chunk、尾部 padding 以及 OpenVLA 双图 `6×224×224` 转换均已通过。所有 episode 均标记为 `success=false / static_validation`，SFT split 会明确拒绝它们。录制时曾出现一次 MJPEG 提前结束警告，但最终视频无解码错误；异常区间抽帧显示为短暂遮光而非块状损坏。
+独立诊断数据集 `datasets/so101_static_validation_v2` 已按正式采集路径录制10条8秒 episode，共 `2394` 帧且没有 capture abort。四路有效位全部为真，host 时间跨度平均 `14.79 ms`、p95 `23.73 ms`、最大 `24.999551 ms`，没有帧超过 `25 ms` 合同。两路 MP4 均可完整解码2394帧；2394张深度图全部是 `uint16[480,640]` TIFF，范围为 `0～1605 mm`。LeRobotDataset 合同、8步 action chunk、尾部 padding 以及 OpenVLA 双图 `6×224×224` 转换均已通过。所有 episode 均标记为 `success=false / static_validation`，SFT split 会明确拒绝它们。录制时曾出现一次 MJPEG 提前结束警告，但最终视频无解码错误；异常区间抽帧显示为短暂遮光而非块状损坏。
 
-### 4.8 详细工作进展流程图
+### 4.9 详细工作进展流程图
 
 下图与前文“真机遥操作示范采集 → 预训练 VLA 监督微调 → 冻结共同 SFT checkpoint → 两条 RL 路线 → 统一真机测试”的总体框架对齐，但只展示已经完成并有验证结果的工作。每个大节点最多保留五项关键内部任务；后续工作完成后，再沿现有箭头增量追加，不在图中预先放入未开始项。
 
@@ -1073,13 +1221,15 @@ flowchart TD
 
     C["③ 预训练 VLA 的真实 Pilot 监督微调<br/>1. 按 layout 完成 20 条真机 episode 的 16/2/2 分组划分与训练集归一化 — 2026-09-25<br/>2. 在真实 batch 上通过 OpenVLA 7B 前向 preflight，确认 [2,8,6] 输出且无 OOM — 2026-09-26<br/>3. 使用 LoRA rank 32 完成 200 个 optimizer step 的真实数据 SFT — 2026-09-26<br/>4. 完成 train/validation/test 指标、曲线、配置和双 checkpoint 归档 — 2026-09-26<br/>5. 通过 checkpoint 重载前向、12 项训练验收、107 项回归测试和 Ruff 检查 — 2026-09-26"]:::done
 
-    D["④ 真机 + 仿真混合 RL 的仿真侧前置验证<br/>1. 集成 SO101 动力学、比赛底图和四节动态 AAA 电池资产 — 2026-09-15<br/>2. 建立 basic_t0 与 sequence_p1_p2_p3 两个可加载 MuJoCo 场景 — 2026-09-15<br/>3. 人工完成蓝色电池双侧夹持并抬升 10 mm 以上的 T0 抓取验证 — 2026-09-15<br/>4. 实现 Basic T0 特权状态环境、随机复位、分阶段奖励和终止判定 — 2026-09-15<br/>5. 打通连续动作 PPO/GRPO 的采集、更新、评估、metrics 和 checkpoint 恢复 — 2026-09-15"]:::sim
+    D["④ T0 四色 100 条正式数据与 SFT<br/>1. 完成红、黄、蓝、绿各 25 条成功示范，共 46,909 帧 — 2026-09-29<br/>2. 按颜色分层完成 80/8/12 划分并冻结数据与归一化指纹 — 2026-09-29<br/>3. 在 A100 完成 train-only 图像增强的 5,000-step OpenVLA-OFT SFT — 2026-10-02<br/>4. 自动选择 step 4500，并完成颜色、关节、预测步和物理单位 MAE 评估 — 2026-10-02<br/>5. 通过 11 项自动验收，轻量报告已回传本地，checkpoint 留在云端 — 2026-10-02"]:::done
 
-    A --> B --> C
-    A --> D
+    E["⑤ 真机 + 仿真混合 RL 的仿真侧前置验证<br/>1. 集成 SO101 动力学、比赛底图和四节动态 AAA 电池资产 — 2026-09-15<br/>2. 建立 basic_t0 与 sequence_p1_p2_p3 两个可加载 MuJoCo 场景 — 2026-09-15<br/>3. 人工完成旧蓝色 AAA 模型双侧夹持并抬升 10 mm 以上的历史 T0 验证 — 2026-09-15<br/>4. 实现 Basic T0 特权状态环境、随机复位、分阶段奖励和终止判定 — 2026-09-15<br/>5. 打通连续动作 PPO/GRPO 的采集、更新、评估、metrics 和 checkpoint 恢复 — 2026-09-15<br/>6. 将四个代理物替换为 20 mm、0.096 kg 方块并改用方块投影入区判定 — 2026-09-29"]:::sim
+
+    A --> B --> C --> D
+    A --> E
 
     classDef done fill:#d9ead3,stroke:#38761d,color:#1f1f1f;
     classDef sim fill:#d9d2e9,stroke:#674ea7,color:#1f1f1f;
 ```
 
-绿色为已完成的真机数据与 SFT 主线，紫色为已完成的混合 RL 仿真侧前置工作。时间点优先使用数据集、训练报告或硬件验收产物的日期；没有独立时间戳的最新验收项使用 README 的确认日期。当前尚未把这个 Pilot checkpoint 冻结为两条 VLA-RL 路线共用的正式 SFT 基线，因此“冻结共同 checkpoint”以及其后的两条训练、独立 metrics 和统一真机对照均不在图中。
+绿色为已完成的真机数据与 SFT 主线，紫色为已完成的混合 RL 仿真侧前置工作。时间点优先使用数据集、训练报告或硬件验收产物的日期；没有独立时间戳的最新验收项使用 README 的确认日期。当前已经得到正式数据的 step 4500 最佳验证候选，但尚未用统一真机协议建立 SFT baseline，因此“冻结共同 checkpoint”以及其后的两条 RL 训练、独立 metrics 和统一真机对照仍不在图中。

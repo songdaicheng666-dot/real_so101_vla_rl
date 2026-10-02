@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/root/autodl-tmp/releases/real_so101_vla_rl-t0-dee306a601ba/scripts/evaluate_openvla_oft_sft.py", line 10, in <module>
+    from real_so101_vla_rl.models import load_sft_config
+  File "/root/autodl-tmp/releases/real_so101_vla_rl-t0-dee306a601ba/src/real_so101_vla_rl/models/__init__.py", line 3, in <module>
+    from .sft_config import SFTConfig, load_sft_config
+  File "/root/autodl-tmp/releases/real_so101_vla_rl-t0-dee306a601ba/src/real_so101_vla_rl/models/sft_config.py", line 11, in <module>
+    from real_so101_vla_rl.data.schema import (
+  File "/root/autodl-tmp/releases/real_so101_vla_rl-t0-dee306a601ba/src/real_so101_vla_rl/data/__init__.py", line 3, in <module>
+    from .action_chunk import action_delta_timestamps, build_action_chunk
+  File "/root/autodl-tmp/releases/real_so101_vla_rl-t0-dee306a601ba/src/real_so101_vla_rl/data/action_chunk.py", line 7, in <module>
+    from .schema import ACTION_CHUNK_SIZE, DEFAULT_FPS, validate_joint_vector
+  File "/root/autodl-tmp/releases/real_so101_vla_rl-t0-dee306a601ba/src/real_so101_vla_rl/data/schema.py", line 9, in <module>
+    from enum import StrEnum
+ImportError: cannot import name 'StrEnum' from 'enum' (/root/miniconda3/lib/python3.10/enum.py)

@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 
 source:
   file: source/challenge_task_board_2026.pdf
@@ -32,6 +32,8 @@ style:
     placeholder: 48
     target: 48
     base: 44
+    dimension: 36
+    small: 30
   placeholder_colors_rgb:
     A: [199, 45, 29]
     B: [237, 206, 35]
@@ -42,18 +44,25 @@ common:
   robot_base:
     center_m: [0.0000, 0.0000]
     diameter_m: 0.2000
-    label: 机械臂底座
+    label: "机械臂底座\n(直径20cm)"
+  annotations:
+    page_size: {position_m: [0.2200, 0.4350], text: "图纸尺寸700×550mm"}
+    base_tangent:
+      start_m: [-0.3500, 0.1000]
+      end_m: [0.2700, 0.1000]
+      label_position_m: [-0.0200, 0.1180]
+      label: 10cm
+    dash_length_m: 0.008
+    dash_gap_m: 0.005
   placeholder_size_m: [0.0700, 0.0800]
   placeholder_centers_y_m:
     top: 0.355914
     bottom: 0.268202
-  aaa_batteries:
-    model_file: batteries_aaa.xml
-    diameter_m: 0.0105
-    total_length_m: 0.0445
-    mass_kg: 0.0115
-    initial_center_z_m: 0.00525
-    initial_axis: world_+y
+  battery_cubes:
+    model_file: battery_cubes.xml
+    edge_length_m: 0.0200
+    mass_kg: 0.096
+    initial_center_z_m: 0.0100
     slot_to_color:
       A: red
       B: yellow
@@ -73,7 +82,8 @@ scenes:
       center_m: [-0.1751, 0.3250]
       size_m: [0.3000, 0.2500]
       corner_radius_m: 0.0150
-      label: 电池摆放区
+      label: 电池摆放区(250×300mm)
+      subtitle: (单块电池尺寸7×8cm)
       label_center_m: [-0.1751, 0.4230]
     placeholders:
       A: {center_m: [-0.214698, 0.355914], label: 电池A}
@@ -85,7 +95,13 @@ scenes:
       center_m: [0.1150, 0.3000]
       size_m: [0.2000, 0.1000]
       corner_radius_m: 0.0090
-      label: T0 基础摆放区
+      label: "T0 基础摆放区\n(100×200mm)"
+    annotations:
+      target_offset:
+        start_m: [0.2650, 0.1000]
+        end_m: [0.2650, 0.2500]
+        label_position_m: [0.2800, 0.1750]
+        label: 15cm
 
   sequence_p1_p2_p3:
     texture: textures/sequence_p1_p2_p3.png
@@ -94,7 +110,8 @@ scenes:
       center_m: [-0.2130, 0.3250]
       size_m: [0.3000, 0.2500]
       corner_radius_m: 0.0150
-      label: 电池摆放区
+      label: 电池摆放区(250×300mm)
+      subtitle: (单块电池尺寸7×8cm)
       label_center_m: [-0.2130, 0.4230]
     placeholders:
       A: {center_m: [-0.252564, 0.355914], label: 电池A}
@@ -117,3 +134,6 @@ scenes:
         outer_diameter_m: 0.1500
         inner_diameter_m: 0.0800
         label: P3内框
+    annotations:
+      target_size_position_m: [0.1280, 0.1050]
+      target_size_label: "外圈15×15cm  内圈8×8cm"

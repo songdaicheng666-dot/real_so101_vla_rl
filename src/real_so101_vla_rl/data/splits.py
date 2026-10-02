@@ -20,6 +20,7 @@ class SplitPolicy(StrEnum):
 
     FULL_TASK_LAYOUT_V1 = "full_task_layout_v1"
     PILOT_SINGLE_TASK_GROUPED_V1 = "pilot_single_task_grouped_v1"
+    T0_COLOR_STRATIFIED_V1 = "t0_color_stratified_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,17 +39,19 @@ class DatasetSplits:
     @classmethod
     def from_dict(cls, raw: dict) -> DatasetSplits:
         raw = dict(raw)
-        raw["policy"] = SplitPolicy(
-            raw.get("policy", SplitPolicy.FULL_TASK_LAYOUT_V1)
-        )
+        raw["policy"] = SplitPolicy(raw.get("policy", SplitPolicy.FULL_TASK_LAYOUT_V1))
         for key in ("group_by", "train", "val", "test"):
             raw[key] = tuple(raw[key])
         return cls(**raw)
 
 
-def _split_group_counts(group_count: int, val_ratio: float, test_ratio: float) -> tuple[int, int]:
+def _split_group_counts(
+    group_count: int, val_ratio: float, test_ratio: float
+) -> tuple[int, int]:
     if group_count < 3:
-        raise ValueError("At least three distinct layouts are required for train/val/test splits")
+        raise ValueError(
+            "At least three distinct layouts are required for train/val/test splits"
+        )
     val_count = max(1, round(group_count * val_ratio))
     test_count = max(1, round(group_count * test_ratio))
     if val_count + test_count >= group_count:
@@ -58,9 +61,54 @@ def _split_group_counts(group_count: int, val_ratio: float, test_ratio: float) -
 
 def _training_has_full_coverage(train_records: Iterable[EpisodeRecord]) -> bool:
     train_records = tuple(train_records)
-    return (
-        {record.target_color for record in train_records} == set(CubeColor)
-        and {record.target_slot for record in train_records} == set(TargetSlot)
+    return {record.target_color for record in train_records} == set(CubeColor) and {
+        record.target_slot for record in train_records
+    } == set(TargetSlot)
+
+
+def _generate_t0_color_stratified_splits(
+    successful: tuple[EpisodeRecord, ...],
+    *,
+    seed: int,
+) -> DatasetSplits:
+    if any(record.target_slot is not TargetSlot.T0 for record in successful):
+        raise ValueError("The T0 color-stratified policy accepts only T0 episodes")
+    by_color: dict[CubeColor, list[EpisodeRecord]] = defaultdict(list)
+    for record in successful:
+        by_color[record.target_color].append(record)
+    if set(by_color) != set(CubeColor):
+        raise ValueError("The T0 color-stratified policy requires all four colors")
+    if any(len(records) != 25 for records in by_color.values()):
+        raise ValueError(
+            "The T0 color-stratified policy requires exactly 25 successful episodes per color"
+        )
+    layout_ids = [record.layout_id for record in successful]
+    if len(layout_ids) != len(set(layout_ids)):
+        raise ValueError(
+            "The randomized T0 dataset requires a unique scene ID for every episode"
+        )
+
+    train: list[int] = []
+    val: list[int] = []
+    test: list[int] = []
+    for color_index, color in enumerate(CubeColor):
+        color_records = sorted(
+            by_color[color],
+            key=lambda record: (record.layout_id, record.episode_index),
+        )
+        random.Random(seed + color_index).shuffle(color_records)
+        test.extend(record.episode_index for record in color_records[:3])
+        val.extend(record.episode_index for record in color_records[3:5])
+        train.extend(record.episode_index for record in color_records[5:])
+
+    return DatasetSplits(
+        schema_version=SCHEMA_VERSION,
+        seed=seed,
+        group_by=("layout_id",),
+        train=tuple(sorted(train)),
+        val=tuple(sorted(val)),
+        test=tuple(sorted(test)),
+        policy=SplitPolicy.T0_COLOR_STRATIFIED_V1,
     )
 
 
@@ -80,7 +128,17 @@ def generate_dataset_splits(
     if not successful:
         raise ValueError("No successful episodes are available for SFT")
     if not 0 < val_ratio < 1 or not 0 < test_ratio < 1 or val_ratio + test_ratio >= 1:
-        raise ValueError("val_ratio and test_ratio must be positive and sum to less than one")
+        raise ValueError(
+            "val_ratio and test_ratio must be positive and sum to less than one"
+        )
+
+    if policy is SplitPolicy.T0_COLOR_STRATIFIED_V1:
+        splits = _generate_t0_color_stratified_splits(
+            successful,
+            seed=seed,
+        )
+        validate_dataset_splits(splits, records)
+        return splits
 
     layouts: dict[str, list[EpisodeRecord]] = defaultdict(list)
     for record in successful:
@@ -102,7 +160,9 @@ def generate_dataset_splits(
         test_layouts = set(shuffled[:test_count])
         val_layouts = set(shuffled[test_count : test_count + val_count])
         train_layouts = set(shuffled[test_count + val_count :])
-        train_records = [record for layout in train_layouts for record in layouts[layout]]
+        train_records = [
+            record for layout in train_layouts for record in layouts[layout]
+        ]
         if (
             policy is SplitPolicy.PILOT_SINGLE_TASK_GROUPED_V1
             or _training_has_full_coverage(train_records)
@@ -117,7 +177,13 @@ def generate_dataset_splits(
     train_layouts, val_layouts, test_layouts = chosen
 
     def indices(layout_set: set[str]) -> tuple[int, ...]:
-        return tuple(sorted(record.episode_index for layout in layout_set for record in layouts[layout]))
+        return tuple(
+            sorted(
+                record.episode_index
+                for layout in layout_set
+                for record in layouts[layout]
+            )
+        )
 
     splits = DatasetSplits(
         schema_version=SCHEMA_VERSION,
@@ -155,7 +221,10 @@ def validate_dataset_splits(
         "val": set(splits.val),
         "test": set(splits.test),
     }
-    if split_sets["train"] & split_sets["val"] or split_sets["train"] & split_sets["test"]:
+    if (
+        split_sets["train"] & split_sets["val"]
+        or split_sets["train"] & split_sets["test"]
+    ):
         raise ValueError("Dataset splits overlap")
     if split_sets["val"] & split_sets["test"]:
         raise ValueError("Dataset splits overlap")
@@ -163,7 +232,9 @@ def validate_dataset_splits(
     successful = {record.episode_index: record for record in records if record.success}
     assigned = set().union(*split_sets.values())
     if assigned != set(successful):
-        raise ValueError("Splits must contain every successful episode exactly once and no failed episodes")
+        raise ValueError(
+            "Splits must contain every successful episode exactly once and no failed episodes"
+        )
 
     layout_partition: dict[str, str] = {}
     for partition, episode_indices in split_sets.items():
@@ -171,12 +242,12 @@ def validate_dataset_splits(
             layout_id = successful[episode_index].layout_id
             previous = layout_partition.setdefault(layout_id, partition)
             if previous != partition:
-                raise ValueError(f"layout_id={layout_id!r} occurs in both {previous} and {partition}")
+                raise ValueError(
+                    f"layout_id={layout_id!r} occurs in both {previous} and {partition}"
+                )
 
     if policy is SplitPolicy.FULL_TASK_LAYOUT_V1:
-        if not _training_has_full_coverage(
-            successful[index] for index in splits.train
-        ):
+        if not _training_has_full_coverage(successful[index] for index in splits.train):
             raise ValueError(
                 "Training split must cover all four colors and T0/P1/P2/P3"
             )
@@ -191,13 +262,27 @@ def validate_dataset_splits(
             raise ValueError(
                 "The pilot split policy requires at least three distinct layouts"
             )
+    elif policy is SplitPolicy.T0_COLOR_STRATIFIED_V1:
+        expected = _generate_t0_color_stratified_splits(
+            tuple(successful.values()),
+            seed=splits.seed,
+        )
+        if splits != expected:
+            raise ValueError(
+                "T0 color-stratified splits do not match the deterministic 20/2/3-per-color policy"
+            )
     else:  # pragma: no cover - StrEnum construction rejects this first
         raise ValueError(f"Unsupported split policy: {policy!r}")
     return splits
 
 
 def write_dataset_splits(path: str | Path, splits: DatasetSplits) -> None:
-    payload = json.dumps(splits.to_dict(), ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    payload = (
+        json.dumps(
+            splits.to_dict(), ensure_ascii=False, indent=2, sort_keys=True
+        ).encode("utf-8")
+        + b"\n"
+    )
     _atomic_write(Path(path), payload)
 
 

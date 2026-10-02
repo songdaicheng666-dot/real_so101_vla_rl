@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -89,10 +90,7 @@ class EpisodeCaptureSummary:
 
 
 def _joint_mapping(state: np.ndarray) -> dict[str, float]:
-    return {
-        name: float(value)
-        for name, value in zip(JOINT_NAMES, state, strict=True)
-    }
+    return {name: float(value) for name, value in zip(JOINT_NAMES, state, strict=True)}
 
 
 def build_recording_frame(
@@ -123,8 +121,12 @@ class SchemaV2EpisodeRecorder:
         synchronizer: Synchronizer,
         dataset: DatasetWriter,
         task: str,
-        teleop_action_processor: Callable[[tuple[Mapping[str, float], Mapping[str, float]]], Mapping[str, float]],
-        robot_action_processor: Callable[[tuple[Mapping[str, float], Mapping[str, float]]], Mapping[str, float]],
+        teleop_action_processor: Callable[
+            [tuple[Mapping[str, float], Mapping[str, float]]], Mapping[str, float]
+        ],
+        robot_action_processor: Callable[
+            [tuple[Mapping[str, float], Mapping[str, float]]], Mapping[str, float]
+        ],
     ) -> None:
         AtomicTask.from_instruction(task)
         self.robot = robot
@@ -224,6 +226,73 @@ def append_capture_failure(
         output.write("\n")
 
 
+def _existing_attempt_state(path: Path) -> tuple[int, dict[int, int]]:
+    if not path.is_file():
+        return 0, {}
+    attempt_index = 0
+    retry_counts: dict[int, int] = {}
+    with path.open(encoding="utf-8") as attempts_file:
+        for line_number, line in enumerate(attempts_file, start=1):
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+                episode_index = int(payload["episode_index_candidate"])
+                recorded_attempt_index = int(payload["attempt_index"])
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise ValueError(
+                    f"Invalid attempts.jsonl record at line {line_number}"
+                ) from exc
+            if recorded_attempt_index != attempt_index:
+                raise ValueError(
+                    "attempts.jsonl attempt_index values must be contiguous"
+                )
+            retry_counts[episode_index] = retry_counts.get(episode_index, 0) + 1
+            attempt_index += 1
+    return attempt_index, retry_counts
+
+
+def append_attempt_record(
+    path: str | Path,
+    *,
+    attempt_index: int,
+    retry_index: int,
+    episode_index: int,
+    trial_id: str,
+    task: str,
+    layout_id: str,
+    outcome: str,
+    summary: EpisodeCaptureSummary,
+    reason: str | None = None,
+) -> None:
+    """Append one accepted or rejected capture attempt without retaining its frames."""
+
+    atomic_task = AtomicTask.from_instruction(task)
+    payload = {
+        "schema_version": 1,
+        "attempt_index": attempt_index,
+        "retry_index": retry_index,
+        "episode_index_candidate": episode_index,
+        "trial_id_candidate": trial_id,
+        "task": task,
+        "target_color": atomic_task.target_color.value,
+        "target_slot": atomic_task.target_slot.value,
+        "layout_id": layout_id,
+        "outcome": outcome,
+        "num_frames": summary.num_frames,
+        "duration_s": summary.duration_s,
+        "reason": reason if reason is not None else summary.reason,
+        "logged_at_unix_ns": time.time_ns(),
+    }
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as output:
+        json.dump(payload, output, ensure_ascii=False, separators=(",", ":"))
+        output.write("\n")
+        output.flush()
+        os.fsync(output.fileno())
+
+
 def collect_episode(
     recorder: SchemaV2EpisodeRecorder,
     controls: RecordingControls,
@@ -279,9 +348,7 @@ def _wait_for_confirmation(
     sleep: Callable[[float], None] = time.sleep,
 ) -> bool:
     controls.enter_phase("confirm")
-    _operator_message(
-        "EPISODE COMPLETE — Enter/s=SAVE, Left/r=DISCARD, Esc/q=STOP"
-    )
+    _operator_message("EPISODE COMPLETE — Enter/s=SAVE, Left/r=DISCARD, Esc/q=STOP")
     while True:
         _, accept, discard, stop = controls.snapshot()
         if stop or discard:
@@ -298,13 +365,24 @@ def _wait_for_layout_setup(
     num_episodes: int,
     task: str,
     layout_id: str,
+    randomized_scene: bool = False,
     sleep: Callable[[float], None] = time.sleep,
 ) -> bool:
     controls.enter_phase("layout_setup")
+    setup_instruction = (
+        f"Scene ID: {layout_id}" if randomized_scene else f"Layout: {layout_id}"
+    )
+    randomization_instruction = (
+        "Randomly place all four cubes inside the legal initial area; "
+        "keep them visible, separated, and reachable.\n"
+        if randomized_scene
+        else ""
+    )
     _operator_message(
         f"PREPARE episode {episode_index + 1}/{num_episodes}\n"
         f"Task: {task}\n"
-        f"Layout: {layout_id}\n"
+        f"{setup_instruction}\n"
+        f"{randomization_instruction}"
         "Press Enter/s to START RECORDING; Esc/q to STOP"
     )
     while True:
@@ -342,7 +420,9 @@ def _run_manual_reset(
         state = state_adapter.read(timeout_ms=200)
         if not state.valid:
             if state_adapter.is_broken:
-                raise RuntimeError(f"SO-101 state adapter failed repeatedly: {state.error}")
+                raise RuntimeError(
+                    f"SO-101 state adapter failed repeatedly: {state.error}"
+                )
             time.sleep(period_s)
             continue
         observation = _joint_mapping(state.value)
@@ -372,29 +452,39 @@ def run_recording_session(
     summaries: list[EpisodeCaptureSummary] = []
     metadata_root = Path(config.dataset.root) / "project_meta"
     failure_path = metadata_root / "capture_failures.jsonl"
+    attempts_path = metadata_root / "attempts.jsonl"
     manifest_path = metadata_root / "episodes.jsonl"
-    recorder = SchemaV2EpisodeRecorder(
-        robot=robot,
-        teleop=teleop,
-        synchronizer=synchronizer,
-        dataset=dataset,
-        task=config.dataset.task,
-        teleop_action_processor=teleop_action_processor,
-        robot_action_processor=robot_action_processor,
-    )
-    while dataset.num_episodes < config.dataset.num_episodes:
+    attempt_index, retry_counts = _existing_attempt_state(attempts_path)
+    if dataset.num_episodes >= config.dataset.num_episodes:
+        return ()
+    session_end = config.dataset.session_end_for_episode(dataset.num_episodes)
+
+    while dataset.num_episodes < session_end:
         if controls.snapshot()[3]:
             break
         episode_index = dataset.num_episodes
+        retry_index = retry_counts.get(episode_index, 0)
+        task = config.dataset.task_for_episode(episode_index)
         layout_id = config.dataset.layout_id_for_episode(episode_index)
         if config.dataset.requires_layout_setup and not _wait_for_layout_setup(
             controls,
             episode_index=episode_index,
             num_episodes=config.dataset.num_episodes,
-            task=config.dataset.task,
+            task=task,
             layout_id=layout_id,
+            randomized_scene=config.dataset.task_plan is not None,
         ):
             break
+        trial_id = f"{config.dataset.trial_id_prefix}-{episode_index:06d}"
+        recorder = SchemaV2EpisodeRecorder(
+            robot=robot,
+            teleop=teleop,
+            synchronizer=synchronizer,
+            dataset=dataset,
+            task=task,
+            teleop_action_processor=teleop_action_processor,
+            robot_action_processor=robot_action_processor,
+        )
         _operator_message(
             f"RECORDING STARTED — episode {episode_index + 1}/"
             f"{config.dataset.num_episodes}, layout={layout_id}; "
@@ -412,9 +502,24 @@ def run_recording_session(
                 f"CAPTURE ABORTED — episode {episode_index + 1} was not saved; "
                 f"reason={summary.reason}"
             )
+            append_attempt_record(
+                attempts_path,
+                attempt_index=attempt_index,
+                retry_index=retry_index,
+                episode_index=episode_index,
+                trial_id=trial_id,
+                task=task,
+                layout_id=layout_id,
+                outcome="synchronization_failed",
+                summary=summary,
+            )
+            retry_counts[episode_index] = retry_index + 1
+            attempt_index += 1
             summaries.append(summary)
             if synchronizer.is_broken:
-                raise RuntimeError("A capture adapter failed repeatedly; stopping recording")
+                raise RuntimeError(
+                    "A capture adapter failed repeatedly; stopping recording"
+                )
             _run_manual_reset(
                 robot=robot,
                 teleop=teleop,
@@ -427,25 +532,45 @@ def run_recording_session(
             )
             continue
         confirmation_rejected = (
-            config.dataset.manual_confirmation
-            and not _wait_for_confirmation(controls)
+            config.dataset.manual_confirmation and not _wait_for_confirmation(controls)
         )
         if summary.reason is not None or confirmation_rejected:
             dataset.clear_episode_buffer()
-            _operator_message(
-                f"EPISODE DISCARDED — layout {layout_id} will be retried"
+            outcome = (
+                "operator_discarded"
+                if confirmation_rejected or summary.reason == "operator discarded"
+                else "capture_rejected"
             )
+            append_attempt_record(
+                attempts_path,
+                attempt_index=attempt_index,
+                retry_index=retry_index,
+                episode_index=episode_index,
+                trial_id=trial_id,
+                task=task,
+                layout_id=layout_id,
+                outcome=outcome,
+                summary=summary,
+                reason=(
+                    "operator rejected confirmation"
+                    if confirmation_rejected
+                    else summary.reason
+                ),
+            )
+            retry_counts[episode_index] = retry_index + 1
+            attempt_index += 1
+            _operator_message(f"EPISODE DISCARDED — layout {layout_id} will be retried")
             summaries.append(summary)
             if controls.snapshot()[3]:
                 break
         else:
             episode_index = dataset.num_episodes
             dataset.save_episode()
-            atomic_task = AtomicTask.from_instruction(config.dataset.task)
+            atomic_task = AtomicTask.from_instruction(task)
             is_demonstration = config.dataset.purpose == "demonstration"
             record = EpisodeRecord.from_task(
                 episode_index=episode_index,
-                trial_id=f"{config.dataset.trial_id_prefix}-{episode_index:06d}",
+                trial_id=trial_id,
                 atomic_task=atomic_task,
                 layout_id=layout_id,
                 success=is_demonstration,
@@ -463,8 +588,23 @@ def run_recording_session(
             accepted = EpisodeCaptureSummary(
                 True, False, summary.num_frames, summary.duration_s
             )
+            append_attempt_record(
+                attempts_path,
+                attempt_index=attempt_index,
+                retry_index=retry_index,
+                episode_index=episode_index,
+                trial_id=trial_id,
+                task=task,
+                layout_id=layout_id,
+                outcome="accepted",
+                summary=accepted,
+            )
+            retry_counts[episode_index] = retry_index + 1
+            attempt_index += 1
             summaries.append(accepted)
         if controls.snapshot()[3]:
+            break
+        if dataset.num_episodes >= session_end:
             break
         _run_manual_reset(
             robot=robot,
@@ -475,5 +615,13 @@ def run_recording_session(
             robot_action_processor=robot_action_processor,
             duration_s=config.dataset.reset_time_s,
             fps=config.dataset.fps,
+        )
+    if (
+        dataset.num_episodes == session_end
+        and session_end < config.dataset.num_episodes
+    ):
+        _operator_message(
+            f"SESSION BOUNDARY REACHED — {session_end}/{config.dataset.num_episodes} accepted; "
+            "run validate-only, then restart with --resume"
         )
     return tuple(summaries)

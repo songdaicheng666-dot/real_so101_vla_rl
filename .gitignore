@@ -7,17 +7,36 @@
 /RLInf/
 /SImpleVLA-RL/
 
-# Python build and test artifacts
+# Local editor, agent, and credential state
+/.agents/
+/.aws/
+/.codex/
+/.vscode/
+
+# Python build, cache, and coverage artifacts
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 build/
 dist/
-/artifacts/
-/runs/
-/so101-nexus
-/Log
-/articles
+
+# Local-only inputs and diagnostics
+/captures/
+/Log/
+/articles/
+
+# Keep every first-party test under this root; tests stay local-only.
 /tests/
+
+# Only the frozen 100-episode release is published from datasets/.
+/datasets/*
+!/datasets/so101_t0_100_lowlight_v1/
+!/datasets/so101_t0_100_lowlight_v1/**
+
+# External project kept as a separate ignored checkout.
+/so101-nexus/

@@ -2,30 +2,31 @@
 
 这个目录保存项目自有的 2026 挑战赛场景资产，并引用项目中原样 vendored 的
 `../SO101_menagerie/` 机械臂网格。当前包含完整 SO101 动力学模型、静态底板、
-四节动态 AAA 电池、干净纹理、灯光、腕部相机和俯视相机。任务奖励和
+四个动态彩色电池代理方块、标注纹理、标定灯光、腕部相机和 overview 相机。任务奖励和
 Gymnasium/RL 代码位于项目的 `rewards/`、`envs/basic_t0.py` 和 `rl/`，不写入
 MJCF 资产文件。
 
 ## 当前完成状态
 
-两套任务底图、SO101 完整动力学模型、四节动态 AAA 电池及交互抓取 Demo 已完成集成。
-在 `basic_t0` 场景中已经过实际人工操作验证：六个舵机关节可正常控制，夹爪能够与
-电池发生接触、闭合夹持并将电池抓起。这说明当前场景中的机械臂执行器、夹爪碰撞、
-电池自由刚体和接触动力学能够共同完成基本抓取，任务仿真环境的基础场景搭建已大致完成。
+两套任务底图、SO101 完整动力学模型、四个动态彩色方块及交互抓取 Demo 已完成集成。
+每个方块边长 `20 mm`，净质量 `0.096 kg`，与当前真机电池代理物一致。
 
-本次人工抓取验收针对 `basic_t0` 场景；`sequence_p1_p2_p3` 复用同一套机械臂和电池
-动力学模型，但仍应在后续任务流程接入时单独验收其完整操作路径。当前已经为
-`basic_t0` 实现目标区域判定、轻量随机复位、特权状态观测、连续 action chunk、
-分阶段奖励、终止条件以及 PPO/GRPO baseline；序列场景的对应任务环境尚未实现。
+原有 `basic_t0` 人工抓取验收使用的是旧 AAA 圆柱模型，只能作为控制器与夹爪链路的
+历史证据，不能证明本次替换后的方块接触和抓取参数已经通过人工验收。新方块模型需要
+重新执行 `basic_t0` 手动抓取回归；`sequence_p1_p2_p3` 也仍需单独验收完整操作路径。
+当前已经为 `basic_t0` 实现目标区域判定、轻量随机复位、特权状态观测、连续
+action chunk、分阶段奖励、终止条件以及 PPO/GRPO baseline；目标区域判定会使用
+方块当前姿态的完整 XY 投影，序列场景的对应任务环境尚未实现。
 
 ## 文件
 
 - `source/challenge_task_board_2026.pdf`：原始双页底图留档。
 - `layouts.yaml`：物理尺寸、坐标、颜色和纹理生成参数的唯一数据源。
+- `alignment.yaml`：底座、关节零偏与范围、Orbbec 内外参、灯光和后处理版本。
 - `textures/basic_t0.png`：电池摆放区 + T0，`2800×2200` RGB。
 - `textures/sequence_p1_p2_p3.png`：电池摆放区 + P1/P2/P3，`2800×2200` RGB。
 - `so101_competition.xml`：基于 Menagerie 模型的比赛坐标适配层。
-- `batteries_aaa.xml`：两个场景共享的四节动态 AAA 电池定义。
+- `battery_cubes.xml`：两个场景共享的四个动态彩色方块定义。
 - `scene_basic_t0.xml`、`scene_sequence_p1_p2_p3.xml`：可独立加载的 MJCF。
 
 两套第三方原始资产分别位于相邻的 `../SO101/` 和 `../SO101_menagerie/`；
@@ -34,23 +35,23 @@ MJCF 资产文件。
 
 ## 模型引用关系
 
-两个 `scene_*.xml` 是最终场景入口，同时共享机械臂适配模型和 AAA 电池集合。
+两个 `scene_*.xml` 是最终场景入口，同时共享机械臂适配模型和电池代理方块集合。
 机械臂适配模型再读取原样 vendored 的 Menagerie STL 网格：
 
 ```text
 scene_basic_t0.xml ───────────────┬─ include → so101_competition.xml
                                   │                         │
                                   │                         └─ meshdir → ../SO101_menagerie/assets/*.stl
-                                  └─ include → batteries_aaa.xml → 四节电池
+                                  └─ include → battery_cubes.xml → 四个方块
 
 scene_sequence_p1_p2_p3.xml ──────┬─ include → so101_competition.xml
                                    │                         │
                                    │                         └─ meshdir → ../SO101_menagerie/assets/*.stl
-                                   └─ include → batteries_aaa.xml → 四节电池
+                                   └─ include → battery_cubes.xml → 四个方块
 ```
 
 运行 MuJoCo 时只需加载对应的 `scene_*.xml`。`so101_competition.xml` 和
-`batteries_aaa.xml` 都不是额外任务场景，分别是共享的机械臂定义和电池定义。
+`battery_cubes.xml` 都不是额外任务场景，分别是共享的机械臂定义和方块定义。
 
 ## 尺寸与坐标
 
@@ -85,16 +86,26 @@ gripper
 
 vendored 原件保持不变。项目自有的 `so101_competition.xml` 只调整网格路径，并将
 机械臂根基座绕世界 `z` 轴旋转 `+90°`，使模型自身的 `+x` 前向与任务底图的
-世界 `+y` 对齐。基座中心仍为 `(0,0,0)`，默认关节位置和控制量均为 Menagerie 零位。
+世界 `+y` 对齐。基座根节为 `(0, 0.035365, 0)`，使朝任务区的前端与 `y=+0.100 m` 切线对齐。两个场景均用完整 `home` keyframe 复位，该姿态由实机零位通过零偏映射而来，不再使用 Menagerie 的全零 `qpos0`。外壳材质为微暖白色，黑色舵机材质保持不变。
 
-## AAA 电池模型
+## 电池代理方块模型
 
-`batteries_aaa.xml` 集中定义红、黄、蓝、绿四节 AAA（7号）电池，分别对应底图的
-A、B、C、D 位置。模型采用 Energizer E92 数据表中的最大尺寸和典型质量：直径
-`10.5 mm`、总长 `44.5 mm`、质量 `11.5 g`。每节电池由一个承担全部质量和接触的
-圆柱碰撞体，以及无碰撞的彩色桶身和银色正负极组成。
+`battery_cubes.xml` 集中定义红、黄、蓝、绿四个电池代理方块，分别对应底图的
+A、B、C、D 位置。每个实物和仿真方块的边长均为 `20 mm`，净质量为
+`0.096 kg`。该数值作为整个方块的质量，不包含机械臂或底板。
 
-每个电池 body 都有独立 `freejoint`，因此能够被夹爪抓取、推动、滚动和掉落：
+MuJoCo 的 box `size` 使用半尺寸，因此碰撞几何写为
+`size="0.010 0.010 0.010"`、`mass="0.096"`。同尺寸的彩色 visual geom 不参与
+接触且质量为零；刚体惯量由 MuJoCo 根据立方体碰撞几何和质量计算。
+
+
+`alignment.yaml` 保留 Orbbec/OpenCV 的绝对主点
+`(321.62958, 236.77197)`。MuJoCo 的 `principalpixel` 语义是相对图像中心的
+偏移，因此两个 MJCF 场景写入的是 `(1.62958, -3.22803)`；这两个值表达同一个
+`640×480` 相机内参，不能互换。overview 的 RGB 输出随后统一应用 Brown–Conrady
+畸变、颜色、gamma、暗角、模糊和受环境 seed 控制的噪声。
+为兼容现有状态、奖励、Demo 和 checkpoint 接口，body/joint 仍保留 `battery_*`
+内部名称。每个 body 都有独立 `freejoint`，能够被夹爪抓取、推动、翻滚和掉落：
 
 ```text
 battery_red       / battery_red_joint
@@ -103,15 +114,14 @@ battery_blue      / battery_blue_joint
 battery_green     / battery_green_joint
 ```
 
-共享文件中的规范布局使用 `basic_t0` 的 A/B/C/D 中心，圆柱长轴沿世界 `+y`。
-`scene_basic_t0.xml` 以零偏移引用它；序列场景通过外层 `<frame>` 将整组电池沿
-世界 `-x` 平移 `0.037866 m`，从而与该页底图的四个占位中心对齐。
+共享文件中的规范布局使用 `basic_t0` 的 A/B/C/D 中心，初始中心高度为
+`z=0.010 m`，使方块底面位于 `z=0` 的底板顶面。`scene_basic_t0.xml` 以零偏移
+引用它；序列场景通过外层 `<frame>` 将整组方块沿世界 `-x` 平移
+`0.037866 m`，从而与该页底图的四个占位中心对齐。
 
-增加两个场景共同使用的电池时，只需在 `batteries_aaa.xml` 中增加 body，并同步更新
+增加两个场景共同使用的代理物时，只需在 `battery_cubes.xml` 中增加 body，并同步更新
 `layouts.yaml`。若以后两个场景需要不同数量或不能用同一个刚性偏移表达的布局，应由
-场景生成脚本或 RL reset 逻辑设置，而不复制电池的几何定义。
-
-Energizer E92 官方数据表：<https://data.energizer.com/pdfs/e92-1119.pdf>
+场景生成脚本或 RL reset 逻辑设置，而不复制方块的几何定义。
 
 ## 底图源文件校验
 
@@ -119,8 +129,8 @@ Energizer E92 官方数据表：<https://data.energizer.com/pdfs/e92-1119.pdf>
 SHA-256  f537b63235542f3a509b6f695651a486232e65c02d21fc457a876f893eb277c6
 ```
 
-生成脚本会先校验此哈希，再使用 `Noto Sans CJK SC` 重新绘制干净纹理。
-它不拉伸或截图 PDF，也不保留尺寸标注与测量虚线。运行 MuJoCo 时只读取已提交的 PNG，
+生成脚本会先校验此哈希，再使用 `Noto Sans CJK SC` 按锁定米制坐标重绘纹理。
+它不拉伸或截图 PDF；尺寸文字、底座圆直径、10/15 cm 虚线和区域尺寸说明由 `layouts.yaml` 以可复现方式补回。运行 MuJoCo 时只读取已提交的 PNG，
 不需要字体、Pillow 或原 PDF。
 
 ## 重新生成纹理
@@ -134,16 +144,17 @@ conda run -n lerobot python scripts/generate_competition_2026_boards.py
 
 ## 人工验收
 
-验收结论：`basic_t0` 交互 Demo 已实际完成机械臂控制、夹爪闭合和电池抓取/抬升，
-基本抓取链路可用。以下命令保留用于重复验证和后续模型参数调整后的回归检查。
+现存人工验收截图记录的是旧 AAA 圆柱模型：`basic_t0` 交互 Demo 当时已完成机械臂
+控制、夹爪闭合和电池抓取/抬升，可作为控制链路的历史回归基线。
 
-![T0 场景中 SO101 双侧夹持并抬升蓝色 AAA 电池的人工验收截图](evidence/t0_manual_grasp_validation.png)
+![T0 场景中 SO101 双侧夹持并抬升旧蓝色 AAA 模型的历史截图](evidence/t0_manual_grasp_validation.png)
 
-截图左侧显示蓝色电池被夹爪夹持并离开底板；右侧终端记录了固定夹爪与活动夹爪
-同时接触、电池高于初始位置 `10 mm` 和抓取成功诊断。该证据验证的是手动控制下的
-基本抓取链路，不代表自动放置、序列任务、奖励或 RL 策略已经完成。
+截图左侧显示旧蓝色模型被夹爪夹持并离开底板；右侧终端记录了固定夹爪与活动夹爪
+同时接触、物体高于初始位置 `10 mm` 和抓取成功诊断。该证据不验证当前
+`20 mm`、`0.096 kg` 方块的接触参数；方块模型需要重新完成同一手动抓取回归。
+无论旧、新模型，该检查都不代表自动放置、序列任务、奖励或 RL 策略已经完成。
 
-要在 T0 场景中通过键盘或 Viewer 右侧 actuator 滑块控制机械臂、手动测试电池抓取，运行：
+要在 T0 场景中通过键盘或 Viewer 右侧 actuator 滑块控制机械臂、手动测试方块抓取，运行：
 
 ```bash
 conda run --no-capture-output -n lerobot \
@@ -153,8 +164,8 @@ conda run --no-capture-output -n lerobot \
 先用顶排数字 `1～6` 选择对应真实舵机 ID：底座旋转、肩部抬升、肘部、腕部俯仰、
 腕部旋转和夹爪；再用 `A/D` 减小/增大所选目标，选择夹爪时分别表示闭合/打开。
 `Space` 暂停/继续，`Backspace` 完整复位。脚本会撤销这些控制键同时触发的 Viewer
-显示开关，因此操作时不会隐藏机械臂、电池或改变可视化效果。终端会报告当前选择、
-目标角度、单侧/双侧夹爪接触、电池抬升 10 mm，以及“双侧接触并抬升”的成功诊断。
+显示开关，因此操作时不会隐藏机械臂、方块或改变可视化效果。终端会报告当前选择、
+目标角度、单侧/双侧夹爪接触、方块抬升 10 mm，以及“双侧接触并抬升”的成功诊断。
 
 若只想确认场景能加载并稳定运行而不打开 GUI，可执行：
 

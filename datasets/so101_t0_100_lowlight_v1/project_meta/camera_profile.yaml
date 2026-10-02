@@ -1,0 +1,66 @@
+schema_version: 2
+rig_id: so101_competition_2026_dual_camera_mounted_exposure150_v3
+
+overview:
+  backend: orbbec_sdk
+  model: Orbbec Gemini 2
+  usb:
+    vendor_id: "2bc5"
+    product_id: "0670"
+    serial: AY6M8630105
+    minimum_speed_mbps: 480
+  firmware: 1.4.92
+  color:
+    width: 640
+    height: 480
+    fps: 30
+    format: MJPG
+    output_color_order: RGB
+  depth:
+    width: 640
+    height: 400
+    fps: 30
+    format: Y16
+    unit: mm
+    aligned_output_width: 640
+    aligned_output_height: 480
+  alignment: depth_to_color
+  frame_sync: true
+  factory_calibration:
+    file: calibration/orbbec_gemini2_AY6M8630105_factory.json
+    sha256: 8ae3694db6a15c83247a0792b5b140b053c6c3f48728025ea89345277615c5f1
+
+wrist:
+  backend: opencv_v4l2
+  model: icspring camera
+  usb:
+    vendor_id: "2993"
+    product_id: "0858"
+    serial: "20240307110322"
+    minimum_speed_mbps: 480
+  device_by_id: /dev/v4l/by-id/usb-icSpring_icspring_camera_20240307110322-video-index0
+  color:
+    width: 640
+    height: 480
+    fps: 30
+    format: MJPG
+    driver_color_order: BGR
+    output_color_order: RGB
+  exposure:
+    mode: manual
+    value: 150
+    gain: 0
+  intrinsic_calibration:
+    status: uncalibrated
+    file: null
+
+installation_calibration:
+  status: uncalibrated
+  overview_to_world: null
+  wrist_to_gripper: null
+
+verified_software:
+  pyorbbecsdk2: 2.1.2
+  orbbec_sdk: 2.9.3
+  opencv_python: 5.0.0.93
+  pyav: 15.1.0

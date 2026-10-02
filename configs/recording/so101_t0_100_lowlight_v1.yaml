@@ -1,0 +1,48 @@
+dataset:
+  repo_id: local/so101_t0_100_lowlight_v1
+  root: datasets/so101_t0_100_lowlight_v1
+  task: null
+  layout_id: null
+  task_plan:
+    target_slot: T0
+    colors:
+      - red
+      - yellow
+      - blue
+      - green
+    episodes_per_color: 25
+    schedule: per_session_stratified_shuffle
+    seed: 42
+    scene_id_prefix: random-t0-scene
+  split_policy: t0_color_stratified_v1
+  normalization_key: so101_cube_dual_rgb_v2
+  trial_id_prefix: real-t0-lowlight
+  num_episodes: 100
+  session_size: 20
+  min_free_gib: 15
+  episode_time_s: 60
+  reset_time_s: 30
+  fps: 30
+  rgb_use_videos: true
+  purpose: demonstration
+  manual_confirmation: true
+
+follower:
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79050068-if00
+  id: my_follower_arm
+  calibration_dir: null
+
+leader:
+  port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79049969-if00
+  id: my_leader_arm
+  calibration_dir: null
+
+cameras:
+  profile: ../hardware/cameras/so101_competition_2026_exposure150.yaml
+
+sync:
+  tolerance_ms: 25
+  timeout_ms: 200
+  max_consecutive_failures: 3
+
+max_relative_target: null

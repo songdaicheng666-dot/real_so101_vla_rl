@@ -13,6 +13,11 @@ import numpy as np
 import yaml
 from gymnasium.utils import seeding
 
+from real_so101_vla_rl.alignment import (
+    OverviewSensorModel,
+    load_alignment,
+    reset_to_home_keyframe,
+)
 from real_so101_vla_rl.envs.base import BatteryReset, ResetSnapshot
 from real_so101_vla_rl.envs.components import (
     BATTERY_COLORS,
@@ -70,12 +75,18 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
         yaw_jitter_rad: float = math.radians(10.0),
         reward_config: T0RewardConfig | None = None,
         render_mode: str | None = None,
-        render_width: int = 224,
-        render_height: int = 224,
+        render_width: int = 640,
+        render_height: int = 480,
+        overview_mode: str = "sensor",
+        sensor_noise: bool = True,
         seed: int | None = None,
     ) -> None:
         if render_mode not in (None, "rgb_array"):
             raise ValueError(f"unsupported render_mode: {render_mode}")
+        if overview_mode not in ("sensor", "raw"):
+            raise ValueError("overview_mode must be 'sensor' or 'raw'")
+        if overview_mode == "sensor" and (render_width, render_height) != (640, 480):
+            raise ValueError("sensor overview rendering requires 640x480")
         if max_episode_chunks <= 0:
             raise ValueError("max_episode_chunks must be positive")
         if position_jitter_m < 0 or yaw_jitter_rad < 0:
@@ -86,6 +97,12 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
         self.model = mujoco.MjModel.from_xml_path(str(SCENE_PATH))
         self.data = mujoco.MjData(self.model)
         self._validate_model()
+        self.alignment = load_alignment()
+        self.alignment_id = str(self.alignment["alignment_id"])
+        self._home_key_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_KEY, "home"
+        )
+        reset_to_home_keyframe(self.model, self.data)
         self.action_chunk_size = action_chunk_size
         self.action_size = self.model.nu
         self.control_hz = control_hz
@@ -95,13 +112,19 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
         self.render_mode = render_mode
         self.render_width = render_width
         self.render_height = render_height
+        self.overview_mode = overview_mode
+        self.sensor_noise = sensor_noise
         self._renderer: mujoco.Renderer | None = None
+        self._sensor_model = (
+            OverviewSensorModel(self.alignment) if overview_mode == "sensor" else None
+        )
+        self._render_frame_index = 0
         self._np_random, self._np_random_seed = seeding.np_random(seed)
 
         with LAYOUT_PATH.open(encoding="utf-8") as stream:
             layout = yaml.safe_load(stream)
         target_layout = layout["scenes"]["basic_t0"]["target"]
-        battery_layout = layout["common"]["aaa_batteries"]
+        battery_layout = layout["common"]["battery_cubes"]
         board_bounds = layout["board"]["bounds_m"]
         self.target_center_xy = tuple(float(v) for v in target_layout["center_m"])
         self.target_size_xy = tuple(float(v) for v in target_layout["size_m"])
@@ -113,8 +136,7 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
             self.model,
             target_center_xy=self.target_center_xy,
             target_size_xy=self.target_size_xy,
-            battery_radius=0.5 * float(battery_layout["diameter_m"]),
-            battery_half_length=0.5 * float(battery_layout["total_length_m"]),
+            battery_half_size=0.5 * float(battery_layout["edge_length_m"]),
         )
         self.observation_size = self.state_builder.observation_size
         self.controller = ActionChunkController(
@@ -140,7 +162,7 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
             shape=(self.observation_size,),
             dtype=np.float32,
         )
-        robot_qpos = self.model.qpos0[: self.model.nu]
+        robot_qpos = self.model.key_qpos[self._home_key_id, : self.model.nu]
         self.initial_normalized_action = self.controller.normalize(robot_qpos).astype(
             np.float32
         )
@@ -169,7 +191,7 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
         if target_color not in BATTERY_COLORS:
             raise ValueError(f"unknown battery color: {target_color}")
 
-        qpos = self.model.qpos0.astype(np.float64, copy=True)
+        qpos = self.model.key_qpos[self._home_key_id].astype(np.float64, copy=True)
         qvel = np.zeros(self.model.nv, dtype=np.float64)
         randomization = []
         for color in BATTERY_COLORS:
@@ -241,6 +263,7 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
         self.target_color = snapshot.target_color
         self.episode_chunks = 0
         self.episode_control_steps = 0
+        self._render_frame_index = 0
         state = self.state_builder.extract(self.data, target_color=self.target_color)
         self.reward.reset(state)
         return self.state_builder.observation(state), self._base_info()
@@ -257,6 +280,8 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
             "reset_id": self.current_snapshot.reset_id,
             "episode_id": self.current_snapshot.reset_id,
             "snapshot": self.current_snapshot,
+            "alignment_id": self.alignment_id,
+            "overview_mode": self.overview_mode,
         }
 
     def step(
@@ -326,7 +351,14 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
                 width=self.render_width,
             )
         self._renderer.update_scene(self.data, camera="overview")
-        return self._renderer.render().copy()
+        raw = self._renderer.render().copy()
+        if self._sensor_model is None:
+            return raw
+        seed = int(self._np_random_seed) + self._render_frame_index
+        self._render_frame_index += 1
+        return self._sensor_model.apply(
+            raw, seed=seed, noise=self.sensor_noise
+        )
 
     def close(self) -> None:
         if self._renderer is not None:

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import gc
 import hashlib
+import io
 import json
 from collections import Counter, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -36,7 +38,10 @@ from real_so101_vla_rl.data.lerobot_dataset import ensure_lerobot_hub_compat
 from real_so101_vla_rl.data.robot_profile import _atomic_write, calibration_sha256
 
 from .config import SO101RecordingConfig
-from .dataset_lifecycle import _validate_recording_features
+from .dataset_lifecycle import (
+    _validate_recording_features,
+    validate_recording_plan_metadata,
+)
 
 if TYPE_CHECKING:
     from real_so101_vla_rl.models.sft_config import SFTConfig
@@ -125,27 +130,21 @@ def _task_index_mapping(meta: Any) -> dict[int, str]:
     return mapping
 
 
-def _validate_tabular_frames(
-    dataset: Any,
+def _validate_tabular_rows(
+    rows: Iterable[dict[str, Any]],
+    *,
+    row_count: int,
+    task_by_index: dict[int, str],
     config: SO101RecordingConfig,
     records_by_index: dict[int, Any],
-) -> tuple[dict[int, tuple[int, int]], list[dict[str, tuple[float, ...]]]]:
-    columns = [
-        "episode_index",
-        "task_index",
-        STATE_KEY,
-        ACTION_KEY,
-        *SENSOR_TIMESTAMP_KEYS,
-        *SENSOR_VALID_KEYS,
-    ]
-    table = dataset.hf_dataset.select_columns(columns)
-    task_by_index = _task_index_mapping(dataset.meta)
+    position_key: str | None = None,
+) -> tuple[dict[int, tuple[int, int, int]], list[dict[str, tuple[float, ...]]]]:
     positions: dict[int, list[int]] = defaultdict(list)
     frame_counts: Counter[int] = Counter()
     normalized_inputs: list[dict[str, tuple[float, ...]]] = []
     tolerance_ns = round(config.sync.tolerance_ms * 1_000_000)
 
-    for position, row in enumerate(table):
+    for relative_position, row in enumerate(rows):
         episode_index = _scalar_int(row["episode_index"], field_name="episode_index")
         record = records_by_index.get(episode_index)
         if record is None:
@@ -182,6 +181,11 @@ def _validate_tabular_frames(
         if not np.isfinite(state).all() or not np.isfinite(action).all():
             raise ValueError("Recorded state and action must contain finite values")
 
+        position = (
+            relative_position
+            if position_key is None
+            else _scalar_int(row[position_key], field_name=position_key)
+        )
         positions[episode_index].append(position)
         frame_counts[episode_index] += 1
         normalized_inputs.append(
@@ -193,10 +197,10 @@ def _validate_tabular_frames(
         )
 
     expected_frames = sum(record.num_frames for record in records_by_index.values())
-    if len(table) != expected_frames:
+    if row_count != expected_frames:
         raise ValueError(
             "LeRobot frame count differs from episode manifest: "
-            f"lerobot={len(table)}, manifest={expected_frames}"
+            f"lerobot={row_count}, manifest={expected_frames}"
         )
     for episode_index, record in records_by_index.items():
         if frame_counts[episode_index] != record.num_frames:
@@ -204,11 +208,75 @@ def _validate_tabular_frames(
                 f"Episode {episode_index} frame count differs: "
                 f"lerobot={frame_counts[episode_index]}, manifest={record.num_frames}"
             )
-    boundaries = {
-        episode_index: (episode_positions[0], episode_positions[-1])
+    media_samples = {
+        episode_index: (
+            episode_positions[0],
+            episode_positions[len(episode_positions) // 2],
+            episode_positions[-1],
+        )
         for episode_index, episode_positions in positions.items()
     }
-    return boundaries, normalized_inputs
+    return media_samples, normalized_inputs
+
+
+def _validate_tabular_frames(
+    dataset: Any,
+    config: SO101RecordingConfig,
+    records_by_index: dict[int, Any],
+) -> tuple[dict[int, tuple[int, int, int]], list[dict[str, tuple[float, ...]]]]:
+    columns = [
+        "episode_index",
+        "task_index",
+        STATE_KEY,
+        ACTION_KEY,
+        *SENSOR_TIMESTAMP_KEYS,
+        *SENSOR_VALID_KEYS,
+    ]
+    table = dataset.hf_dataset.select_columns(columns)
+    return _validate_tabular_rows(
+        table,
+        row_count=len(table),
+        task_by_index=_task_index_mapping(dataset.meta),
+        config=config,
+        records_by_index=records_by_index,
+    )
+
+
+def _parquet_dataset(root: Path) -> Any:
+    from pyarrow import dataset as pyarrow_dataset
+
+    paths = sorted((root / "data").glob("*/*.parquet"))
+    if not paths:
+        raise FileNotFoundError(
+            f"Recorded dataset contains no Parquet shards: {root / 'data'}"
+        )
+    return pyarrow_dataset.dataset([str(path) for path in paths], format="parquet")
+
+
+def _validate_projected_tabular_frames(
+    parquet_dataset: Any,
+    meta: Any,
+    config: SO101RecordingConfig,
+    records_by_index: dict[int, Any],
+) -> tuple[dict[int, tuple[int, int, int]], list[dict[str, tuple[float, ...]]]]:
+    columns = [
+        "index",
+        "episode_index",
+        "task_index",
+        STATE_KEY,
+        ACTION_KEY,
+        *SENSOR_TIMESTAMP_KEYS,
+        *SENSOR_VALID_KEYS,
+    ]
+    table = parquet_dataset.to_table(columns=columns)
+    return _validate_tabular_rows(
+        table.to_pylist(),
+        row_count=table.num_rows,
+        task_by_index=_task_index_mapping(meta),
+        config=config,
+        records_by_index=records_by_index,
+        position_key="index",
+    )
 
 
 def _validate_decoded_sample(sample: dict[str, Any], *, label: str) -> None:
@@ -235,17 +303,122 @@ def _validate_decoded_sample(sample: dict[str, Any], *, label: str) -> None:
         raise ValueError(f"{label} decoded depth must contain integer millimetres")
 
 
-def _validate_media_boundaries(
-    dataset: Any, boundaries: dict[int, tuple[int, int]]
+def _validate_media_samples(
+    dataset: Any, media_samples: dict[int, tuple[int, int, int]]
 ) -> None:
-    for episode_index, (first, last) in boundaries.items():
-        _validate_decoded_sample(
-            dataset[first], label=f"episode {episode_index} first frame"
-        )
-        if last != first:
+    labels = ("first", "middle", "last")
+    for episode_index, sample_positions in media_samples.items():
+        decoded_positions: set[int] = set()
+        for label, position in zip(labels, sample_positions, strict=True):
+            if position in decoded_positions:
+                continue
+            decoded_positions.add(position)
             _validate_decoded_sample(
-                dataset[last], label=f"episode {episode_index} last frame"
+                dataset[position], label=f"episode {episode_index} {label} frame"
             )
+
+
+def _decode_embedded_image(value: Any, *, key: str) -> np.ndarray:
+    from PIL import Image
+
+    if not isinstance(value, dict) or not value.get("bytes"):
+        raise ValueError(f"Projected media sample {key!r} has no embedded bytes")
+    with Image.open(io.BytesIO(value["bytes"])) as image:
+        array = np.array(image, copy=True)
+    if array.ndim == 2:
+        return array[np.newaxis, ...]
+    if array.ndim == 3:
+        return np.moveaxis(array, -1, 0)
+    raise ValueError(f"Projected media sample {key!r} has invalid shape {array.shape}")
+
+
+def _validate_projected_media_samples(
+    root: Path,
+    meta: Any,
+    media_samples: dict[int, tuple[int, int, int]],
+) -> None:
+    import pyarrow as pa
+    from pyarrow import parquet
+
+    decode_video_frames = None
+    if meta.video_keys:
+        from lerobot.datasets.video_utils import decode_video_frames
+
+    samples_by_path: dict[Path, list[tuple[int, tuple[int, int, int]]]] = defaultdict(
+        list
+    )
+    for episode_index, sample_positions in media_samples.items():
+        data_path = root / meta.get_data_file_path(episode_index)
+        samples_by_path[data_path].append((episode_index, sample_positions))
+
+    columns = ["index", "episode_index", "timestamp", *meta.image_keys]
+    labels = ("first", "middle", "last")
+    for data_path, requests in samples_by_path.items():
+        requested_indices = sorted(
+            {
+                position
+                for _, sample_positions in requests
+                for position in sample_positions
+            }
+        )
+        table = parquet.read_table(
+            data_path,
+            columns=columns,
+            filters=[("index", "in", requested_indices)],
+            use_threads=False,
+        )
+        rows_by_index: dict[int, dict[str, Any]] = {}
+        for row in table.to_pylist():
+            index = _scalar_int(row["index"], field_name="index")
+            if index in rows_by_index:
+                raise ValueError(f"Duplicate projected media frame index {index}")
+            rows_by_index[index] = row
+        if set(rows_by_index) != set(requested_indices):
+            missing = sorted(set(requested_indices) - set(rows_by_index))
+            raise ValueError(
+                f"Projected media samples are missing frame indices {missing}"
+            )
+
+        for episode_index, sample_positions in requests:
+            decoded_positions: set[int] = set()
+            for label, position in zip(labels, sample_positions, strict=True):
+                if position in decoded_positions:
+                    continue
+                decoded_positions.add(position)
+                row = rows_by_index[position]
+                row_episode_index = _scalar_int(
+                    row["episode_index"], field_name="episode_index"
+                )
+                if row_episode_index != episode_index:
+                    raise ValueError(
+                        f"Projected frame {position} belongs to episode "
+                        f"{row_episode_index}, expected {episode_index}"
+                    )
+                sample = {
+                    key: _decode_embedded_image(row[key], key=key)
+                    for key in meta.image_keys
+                }
+                timestamp = float(row["timestamp"])
+                episode_metadata = meta.episodes[episode_index]
+                for key in meta.video_keys:
+                    from_timestamp = episode_metadata[f"videos/{key}/from_timestamp"]
+                    video_path = root / meta.get_video_file_path(episode_index, key)
+                    frames = decode_video_frames(
+                        video_path,
+                        [from_timestamp + timestamp],
+                        tolerance_s=1e-4,
+                        backend="pyav",
+                        return_uint8=True,
+                        is_depth=key in meta.depth_keys,
+                    )
+                    sample[key] = frames.squeeze(0)
+                _validate_decoded_sample(
+                    sample, label=f"episode {episode_index} {label} frame"
+                )
+
+        del rows_by_index, table
+        gc.collect()
+        pa.default_memory_pool().release_unused()
 
 
 def _write_or_validate_splits(path: Path, splits: DatasetSplits) -> None:
@@ -305,6 +478,7 @@ def finalize_recorded_so101_dataset(
     root = Path(recording_config.dataset.root).expanduser().resolve()
     metadata_root = root / "project_meta"
     _validate_project_provenance(recording_config, metadata_root)
+    validate_recording_plan_metadata(recording_config)
     manifest_path = metadata_root / "episodes.jsonl"
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Episode manifest is missing: {manifest_path}")
@@ -319,7 +493,7 @@ def finalize_recorded_so101_dataset(
     for episode_index, record in records_by_index.items():
         if (
             not record.success
-            or record.task != recording_config.dataset.task
+            or record.task != recording_config.dataset.task_for_episode(episode_index)
             or record.layout_id
             != recording_config.dataset.layout_id_for_episode(episode_index)
             or record.trial_id
@@ -329,18 +503,25 @@ def finalize_recorded_so101_dataset(
                 f"Episode {episode_index} does not match the recording plan"
             )
 
+    dataset = None
+    parquet_dataset = None
     if dataset_factory is None:
         ensure_lerobot_hub_compat()
-        from lerobot.datasets import LeRobotDataset
+        from lerobot.datasets import LeRobotDatasetMetadata
 
-        dataset_factory = LeRobotDataset
-    dataset = dataset_factory(
-        repo_id=recording_config.dataset.repo_id,
-        root=root,
-        return_uint8=True,
-        video_backend="pyav",
-    )
-    meta = dataset.meta
+        meta = LeRobotDatasetMetadata(
+            recording_config.dataset.repo_id,
+            root,
+        )
+        parquet_dataset = _parquet_dataset(root)
+    else:
+        dataset = dataset_factory(
+            repo_id=recording_config.dataset.repo_id,
+            root=root,
+            return_uint8=True,
+            video_backend="pyav",
+        )
+        meta = dataset.meta
     if int(meta.total_episodes) != len(records):
         raise ValueError(
             "LeRobot episode count differs from project manifest: "
@@ -357,12 +538,25 @@ def finalize_recorded_so101_dataset(
         rgb_use_videos=recording_config.dataset.rgb_use_videos,
     )
 
-    boundaries, frame_rows = _validate_tabular_frames(
-        dataset,
-        recording_config,
-        records_by_index,
-    )
-    _validate_media_boundaries(dataset, boundaries)
+    if dataset is None:
+        media_samples, frame_rows = _validate_projected_tabular_frames(
+            parquet_dataset,
+            meta,
+            recording_config,
+            records_by_index,
+        )
+        _validate_projected_media_samples(
+            root,
+            meta,
+            media_samples,
+        )
+    else:
+        media_samples, frame_rows = _validate_tabular_frames(
+            dataset,
+            recording_config,
+            records_by_index,
+        )
+        _validate_media_samples(dataset, media_samples)
 
     if validate_only:
         return RealDatasetFinalizationSummary(
@@ -412,6 +606,8 @@ def finalize_recorded_so101_dataset(
         "recording_config_sha256": recording_config_sha256,
         "sft_config_sha256": sft_config_sha256,
     }
+    if recording_config.dataset.task_plan is not None:
+        report["recording_plan_sha256"] = recording_config.dataset.plan_sha256
     _write_or_validate_json(metadata_root / FINALIZATION_FILENAME, report)
     return RealDatasetFinalizationSummary(
         root=str(root),

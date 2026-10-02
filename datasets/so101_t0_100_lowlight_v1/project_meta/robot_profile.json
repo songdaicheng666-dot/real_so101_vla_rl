@@ -1,0 +1,59 @@
+{
+  "calibration_file": "calibration.json",
+  "calibration_sha256": "45db12b1b454fe41146c6780eebce1a7a5aad4e79f631042821ffcb61d8dff70",
+  "camera_setup_id": "so101_competition_2026_dual_camera_mounted_exposure150_v3",
+  "control_fps": 30,
+  "joint_order": [
+    "shoulder_pan.pos",
+    "shoulder_lift.pos",
+    "elbow_flex.pos",
+    "wrist_flex.pos",
+    "wrist_roll.pos",
+    "gripper.pos"
+  ],
+  "joint_units": [
+    "degree",
+    "degree",
+    "degree",
+    "degree",
+    "degree",
+    "lerobot_range_0_100"
+  ],
+  "lerobot_commit": "4aaff99be4a1d81568c08c8f0296b41b40c99ec4",
+  "nominal_ranges": {
+    "elbow_flex.pos": {
+      "maximum": 97.45054945054945,
+      "minimum": -97.45054945054945,
+      "unit": "degree"
+    },
+    "gripper.pos": {
+      "maximum": 100.0,
+      "minimum": 0.0,
+      "unit": "lerobot_range_0_100"
+    },
+    "shoulder_lift.pos": {
+      "maximum": 105.14285714285714,
+      "minimum": -105.14285714285714,
+      "unit": "degree"
+    },
+    "shoulder_pan.pos": {
+      "maximum": 120.13186813186813,
+      "minimum": -120.13186813186813,
+      "unit": "degree"
+    },
+    "wrist_flex.pos": {
+      "maximum": 103.78021978021978,
+      "minimum": -103.78021978021978,
+      "unit": "degree"
+    },
+    "wrist_roll.pos": {
+      "maximum": 180.0,
+      "minimum": -180.0,
+      "unit": "degree"
+    }
+  },
+  "robot_id": "my_follower_arm",
+  "robot_type": "so101_follower",
+  "schema_version": 2,
+  "use_degrees": true
+}

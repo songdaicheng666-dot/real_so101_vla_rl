@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the clean 2026 competition board textures from layouts.yaml."""
+"""Generate annotated 2026 competition board textures from layouts.yaml."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 from PIL import Image, ImageDraw, ImageFont
 
@@ -128,14 +129,44 @@ class BoardRenderer:
         font_name: str,
         fill: tuple[int, int, int],
     ) -> None:
-        draw.text(
+        draw.multiline_text(
             self.point(position_m),
             text,
             font=self.fonts[font_name],
             fill=fill,
             anchor="mm",
+            align="center",
+            spacing=0,
             stroke_width=0,
         )
+
+    def dashed_line(
+        self,
+        draw: ImageDraw.ImageDraw,
+        start_m: list[float],
+        end_m: list[float],
+    ) -> None:
+        """Draw one metric dashed construction line."""
+
+        start = np.asarray(self.point(start_m), dtype=np.float64)
+        end = np.asarray(self.point(end_m), dtype=np.float64)
+        delta = end - start
+        length = float(np.linalg.norm(delta))
+        if length == 0:
+            return
+        direction = delta / length
+        annotations = self.config["common"]["annotations"]
+        dash = self.to_pixels(annotations["dash_length_m"])
+        gap = self.to_pixels(annotations["dash_gap_m"])
+        cursor = 0.0
+        while cursor < length:
+            segment_end = min(cursor + dash, length)
+            draw.line(
+                [tuple(start + cursor * direction), tuple(start + segment_end * direction)],
+                fill=self.outline,
+                width=max(2, self.outline_width // 2),
+            )
+            cursor += dash + gap
 
     def draw_common(
         self,
@@ -155,6 +186,13 @@ class BoardRenderer:
             source["label_center_m"],
             source["label"],
             "source",
+            self.outline,
+        )
+        self.centered_text(
+            draw,
+            [source["label_center_m"][0], source["label_center_m"][1] - 0.018],
+            source["subtitle"],
+            "small",
             self.outline,
         )
 
@@ -189,6 +227,17 @@ class BoardRenderer:
             self.outline,
         )
 
+        annotations = self.config["common"]["annotations"]
+        tangent = annotations["base_tangent"]
+        self.dashed_line(draw, tangent["start_m"], tangent["end_m"])
+        self.centered_text(
+            draw, tangent["label_position_m"], tangent["label"], "dimension", self.outline
+        )
+        page_size = annotations["page_size"]
+        self.centered_text(
+            draw, page_size["position_m"], page_size["text"], "dimension", self.outline
+        )
+
     def render_basic(self, scene: dict[str, Any]) -> Image.Image:
         image = Image.new("RGB", self.image_size, self.background)
         draw = ImageDraw.Draw(image)
@@ -207,6 +256,11 @@ class BoardRenderer:
             target["label"],
             "target",
             self.outline,
+        )
+        offset = scene["annotations"]["target_offset"]
+        self.dashed_line(draw, offset["start_m"], offset["end_m"])
+        self.centered_text(
+            draw, offset["label_position_m"], offset["label"], "dimension", self.outline
         )
         return image
 
@@ -236,6 +290,14 @@ class BoardRenderer:
                 "target",
                 self.outline,
             )
+        annotation = scene["annotations"]
+        self.centered_text(
+            draw,
+            annotation["target_size_position_m"],
+            annotation["target_size_label"],
+            "dimension",
+            self.outline,
+        )
         return image
 
 

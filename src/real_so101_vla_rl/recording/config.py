@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import random
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +12,13 @@ from typing import Any
 
 import yaml
 
-from real_so101_vla_rl.data.schema import DEFAULT_FPS, AtomicTask
+from real_so101_vla_rl.data.schema import (
+    DEFAULT_FPS,
+    AtomicTask,
+    CubeColor,
+    TargetSlot,
+    TaskType,
+)
 from real_so101_vla_rl.data.splits import SplitPolicy
 from real_so101_vla_rl.hardware.cameras.profile import (
     LoadedCameraRigProfile,
@@ -31,10 +40,114 @@ class ArmEndpointConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class RecordingPlanEntry:
+    """One deterministic accepted-episode slot in a recording plan."""
+
+    episode_index: int
+    task: str
+    layout_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class TaskPlanConfig:
+    """Balanced randomized T0 task scheduling for a multi-task dataset."""
+
+    target_slot: TargetSlot
+    colors: tuple[CubeColor, ...]
+    episodes_per_color: int
+    schedule: str
+    seed: int
+    scene_id_prefix: str
+
+    def __post_init__(self) -> None:
+        if self.target_slot is not TargetSlot.T0:
+            raise ValueError("task_plan.target_slot currently supports only T0")
+        if not self.colors or len(set(self.colors)) != len(self.colors):
+            raise ValueError("task_plan.colors must contain unique colors")
+        if set(self.colors) != set(CubeColor):
+            raise ValueError(
+                "task_plan.colors must contain red, blue, yellow, and green"
+            )
+        if self.episodes_per_color <= 0:
+            raise ValueError("task_plan.episodes_per_color must be positive")
+        if self.schedule != "per_session_stratified_shuffle":
+            raise ValueError(
+                "task_plan.schedule must be 'per_session_stratified_shuffle'"
+            )
+        if not isinstance(self.seed, int):
+            raise TypeError("task_plan.seed must be an integer")
+        if not self.scene_id_prefix.strip():
+            raise ValueError("task_plan.scene_id_prefix must not be empty")
+
+    def build_entries(
+        self,
+        *,
+        num_episodes: int,
+        session_size: int,
+    ) -> tuple[RecordingPlanEntry, ...]:
+        color_count = len(self.colors)
+        if session_size <= 0 or session_size % color_count:
+            raise ValueError(
+                "dataset.session_size must be positive and divisible by the number of task-plan colors"
+            )
+        if num_episodes % session_size:
+            raise ValueError(
+                "dataset.num_episodes must be divisible by dataset.session_size"
+            )
+        if num_episodes != color_count * self.episodes_per_color:
+            raise ValueError(
+                "dataset.num_episodes must equal task_plan colors times episodes_per_color"
+            )
+        sessions = num_episodes // session_size
+        per_color_per_session = session_size // color_count
+        if sessions * per_color_per_session != self.episodes_per_color:
+            raise ValueError(
+                "task_plan cannot distribute every color evenly across recording sessions"
+            )
+
+        scheduled_colors: list[CubeColor] = []
+        for session_index in range(sessions):
+            if session_index == 0:
+                # The first four episodes are a one-per-color canary. The rest of
+                # the first session still preserves exact per-color balance.
+                block = list(self.colors)
+                remainder = [
+                    color
+                    for color in self.colors
+                    for _ in range(per_color_per_session - 1)
+                ]
+                random.Random(self.seed + session_index).shuffle(remainder)
+                block.extend(remainder)
+            else:
+                block = [
+                    color for color in self.colors for _ in range(per_color_per_session)
+                ]
+                random.Random(self.seed + session_index).shuffle(block)
+            scheduled_colors.extend(block)
+
+        entries = []
+        for episode_index, color in enumerate(scheduled_colors):
+            task = AtomicTask(
+                TaskType.SINGLE_T0,
+                color,
+                TargetSlot.T0,
+                0,
+            ).instruction
+            entries.append(
+                RecordingPlanEntry(
+                    episode_index=episode_index,
+                    task=task,
+                    layout_id=f"{self.scene_id_prefix}-{episode_index + 1:03d}",
+                )
+            )
+        return tuple(entries)
+
+
+@dataclass(frozen=True, slots=True)
 class DatasetRecordingConfig:
     repo_id: str
     root: str
-    task: str
+    task: str | None
     layout_id: str | None
     trial_id_prefix: str
     num_episodes: int = 10
@@ -47,17 +160,30 @@ class DatasetRecordingConfig:
     layout_ids: tuple[str, ...] = ()
     split_policy: SplitPolicy = SplitPolicy.FULL_TASK_LAYOUT_V1
     normalization_key: str = "so101_cube_dual_rgb_v2"
+    task_plan: TaskPlanConfig | None = None
+    session_size: int | None = None
+    min_free_gib: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.repo_id.strip() or not self.root.strip():
             raise ValueError("dataset.repo_id and dataset.root must not be empty")
-        AtomicTask.from_instruction(self.task)
+        fixed_task = isinstance(self.task, str) and bool(self.task.strip())
+        planned_tasks = self.task_plan is not None
+        if fixed_task == planned_tasks:
+            raise ValueError("dataset must configure exactly one of task or task_plan")
+        if self.task is not None and not fixed_task:
+            raise ValueError("dataset.task must be null or a non-empty string")
+        if fixed_task:
+            assert self.task is not None
+            AtomicTask.from_instruction(self.task)
         if not self.trial_id_prefix.strip():
             raise ValueError("dataset.trial_id_prefix must not be empty")
         if self.num_episodes <= 0:
             raise ValueError("dataset.num_episodes must be positive")
         if self.episode_time_s <= 0 or self.reset_time_s < 0:
-            raise ValueError("episode_time_s must be positive and reset_time_s non-negative")
+            raise ValueError(
+                "episode_time_s must be positive and reset_time_s non-negative"
+            )
         if self.fps != DEFAULT_FPS:
             raise ValueError(f"Schema v2 recording fps is fixed at {DEFAULT_FPS}")
         if type(self.rgb_use_videos) is not bool:
@@ -68,42 +194,128 @@ class DatasetRecordingConfig:
             )
         if type(self.manual_confirmation) is not bool:
             raise TypeError("dataset.manual_confirmation must be a boolean")
-        if not isinstance(self.normalization_key, str) or not self.normalization_key.strip():
+        if (
+            not isinstance(self.normalization_key, str)
+            or not self.normalization_key.strip()
+        ):
             raise ValueError("dataset.normalization_key must be a non-empty string")
-        fixed_layout = (
-            isinstance(self.layout_id, str) and bool(self.layout_id.strip())
-        )
-        planned_layouts = bool(self.layout_ids)
-        if fixed_layout == planned_layouts:
+        if self.session_size is not None and (
+            self.session_size <= 0 or self.session_size > self.num_episodes
+        ):
             raise ValueError(
-                "dataset must configure exactly one of layout_id or layout_ids"
+                "dataset.session_size must be positive and no greater than num_episodes"
             )
-        if self.layout_id is not None and not fixed_layout:
-            raise ValueError("dataset.layout_id must be null or a non-empty string")
-        if planned_layouts:
-            if len(self.layout_ids) != self.num_episodes:
+        if self.min_free_gib < 0:
+            raise ValueError("dataset.min_free_gib must be non-negative")
+
+        fixed_layout = isinstance(self.layout_id, str) and bool(self.layout_id.strip())
+        planned_layouts = bool(self.layout_ids)
+        if planned_tasks:
+            if fixed_layout or planned_layouts or self.layout_id is not None:
                 raise ValueError(
-                    "dataset.layout_ids must contain exactly num_episodes entries"
+                    "dataset.task_plan generates scene IDs; layout_id and layout_ids must be empty"
                 )
-            if any(not isinstance(value, str) or not value.strip() for value in self.layout_ids):
-                raise ValueError("dataset.layout_ids entries must be non-empty strings")
-            if len(set(self.layout_ids)) != len(self.layout_ids):
-                raise ValueError("dataset.layout_ids entries must be unique")
+            if self.session_size is None:
+                raise ValueError("dataset.session_size is required with task_plan")
+            assert self.task_plan is not None
+            self.task_plan.build_entries(
+                num_episodes=self.num_episodes,
+                session_size=self.session_size,
+            )
+        else:
+            if fixed_layout == planned_layouts:
+                raise ValueError(
+                    "dataset must configure exactly one of layout_id or layout_ids"
+                )
+            if self.layout_id is not None and not fixed_layout:
+                raise ValueError("dataset.layout_id must be null or a non-empty string")
+            if planned_layouts:
+                if len(self.layout_ids) != self.num_episodes:
+                    raise ValueError(
+                        "dataset.layout_ids must contain exactly num_episodes entries"
+                    )
+                if any(
+                    not isinstance(value, str) or not value.strip()
+                    for value in self.layout_ids
+                ):
+                    raise ValueError(
+                        "dataset.layout_ids entries must be non-empty strings"
+                    )
+                if len(set(self.layout_ids)) != len(self.layout_ids):
+                    raise ValueError("dataset.layout_ids entries must be unique")
         SplitPolicy(self.split_policy)
 
-    def layout_id_for_episode(self, episode_index: int) -> str:
+    def plan_entries(self) -> tuple[RecordingPlanEntry, ...]:
+        if self.task_plan is not None:
+            assert self.session_size is not None
+            return self.task_plan.build_entries(
+                num_episodes=self.num_episodes,
+                session_size=self.session_size,
+            )
+        assert self.task is not None
+        return tuple(
+            RecordingPlanEntry(
+                episode_index=index,
+                task=self.task,
+                layout_id=(
+                    self.layout_ids[index] if self.layout_ids else str(self.layout_id)
+                ),
+            )
+            for index in range(self.num_episodes)
+        )
+
+    def plan_entry_for_episode(self, episode_index: int) -> RecordingPlanEntry:
         if not 0 <= episode_index < self.num_episodes:
             raise IndexError(
                 f"episode_index must be in [0, {self.num_episodes}), got {episode_index}"
             )
-        if self.layout_ids:
-            return self.layout_ids[episode_index]
-        assert self.layout_id is not None
-        return self.layout_id
+        return self.plan_entries()[episode_index]
+
+    def task_for_episode(self, episode_index: int) -> str:
+        return self.plan_entry_for_episode(episode_index).task
+
+    def session_end_for_episode(self, episode_index: int) -> int:
+        if not 0 <= episode_index < self.num_episodes:
+            raise IndexError(
+                f"episode_index must be in [0, {self.num_episodes}), got {episode_index}"
+            )
+        if self.session_size is None:
+            return self.num_episodes
+        return min(
+            ((episode_index // self.session_size) + 1) * self.session_size,
+            self.num_episodes,
+        )
+
+    @property
+    def plan_sha256(self) -> str:
+        payload = {
+            "schema_version": 1,
+            "repo_id": self.repo_id,
+            "num_episodes": self.num_episodes,
+            "session_size": self.session_size,
+            "entries": [
+                {
+                    "episode_index": entry.episode_index,
+                    "task": entry.task,
+                    "layout_id": entry.layout_id,
+                }
+                for entry in self.plan_entries()
+            ],
+        }
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def layout_id_for_episode(self, episode_index: int) -> str:
+        return self.plan_entry_for_episode(episode_index).layout_id
 
     @property
     def requires_layout_setup(self) -> bool:
-        return bool(self.layout_ids)
+        return bool(self.layout_ids) or self.task_plan is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,8 +352,12 @@ class SO101RecordingConfig:
     max_relative_target: float | None = None
 
     def validate(self, *, require_hardware_ready: bool = True) -> None:
-        self.follower.validate(name="follower", require_hardware_ready=require_hardware_ready)
-        self.leader.validate(name="leader", require_hardware_ready=require_hardware_ready)
+        self.follower.validate(
+            name="follower", require_hardware_ready=require_hardware_ready
+        )
+        self.leader.validate(
+            name="leader", require_hardware_ready=require_hardware_ready
+        )
         self.cameras.validate(require_hardware_ready=require_hardware_ready)
         if self.max_relative_target is not None and self.max_relative_target <= 0:
             raise ValueError("max_relative_target must be positive when set")
@@ -172,6 +388,24 @@ def load_recording_config(
     if not isinstance(layout_ids_raw, (list, tuple)):
         raise TypeError("dataset.layout_ids must be a sequence")
     dataset_raw["layout_ids"] = tuple(layout_ids_raw)
+    task_plan_raw = dataset_raw.get("task_plan")
+    if task_plan_raw is not None:
+        if not isinstance(task_plan_raw, Mapping):
+            raise TypeError("dataset.task_plan must be a mapping")
+        task_plan_values = dict(task_plan_raw)
+        colors_raw = task_plan_values.get("colors")
+        if not isinstance(colors_raw, (list, tuple)):
+            raise TypeError("dataset.task_plan.colors must be a sequence")
+        try:
+            task_plan_values["colors"] = tuple(CubeColor(value) for value in colors_raw)
+            task_plan_values["target_slot"] = TargetSlot(
+                task_plan_values.get("target_slot")
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "dataset.task_plan contains an unsupported color or target slot"
+            ) from exc
+        dataset_raw["task_plan"] = TaskPlanConfig(**task_plan_values)
     try:
         dataset_raw["split_policy"] = SplitPolicy(
             dataset_raw.get("split_policy", SplitPolicy.FULL_TASK_LAYOUT_V1)

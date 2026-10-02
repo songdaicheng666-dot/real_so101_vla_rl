@@ -51,6 +51,57 @@ ActionTokenizer = Callable[[np.ndarray], Any]
 BaseTokenizer = Callable[..., Any]
 
 
+@dataclass(frozen=True, slots=True)
+class UpstreamOFTImageTransform:
+    """Apply the OpenVLA-OFT train augmentation before model preprocessing.
+
+    The upstream RLDS pipeline first resizes observations to the model input
+    resolution and then applies a fixed-strength random resized crop and color
+    jitter. Torch's RNG supplies the randomness, so the trainer seed and
+    DataLoader worker seeds fully control reproducibility.
+    """
+
+    base_transform: ImageTransform
+    image_size: int
+
+    def __post_init__(self) -> None:
+        if self.image_size <= 0:
+            raise ValueError("image_size must be positive")
+
+    def __call__(self, image: Image.Image) -> torch.Tensor:
+        from torchvision.transforms import ColorJitter, RandomResizedCrop
+        from torchvision.transforms.functional import InterpolationMode
+
+        augment = RandomResizedCrop(
+            size=(self.image_size, self.image_size),
+            scale=(0.9, 0.9),
+            ratio=(1.0, 1.0),
+            interpolation=InterpolationMode.BILINEAR,
+            antialias=True,
+        )
+        jitter = ColorJitter(
+            brightness=0.2,
+            contrast=(0.8, 1.2),
+            saturation=(0.8, 1.2),
+            hue=0.05,
+        )
+        return self.base_transform(jitter(augment(image)))
+
+
+def image_transform_for_split(
+    base_transform: ImageTransform,
+    *,
+    split: SplitName,
+    image_augmentation: bool,
+    image_size: int,
+) -> ImageTransform:
+    """Return train-only augmentation while keeping val/test deterministic."""
+
+    if split == "train" and image_augmentation:
+        return UpstreamOFTImageTransform(base_transform, image_size)
+    return base_transform
+
+
 def format_openvla_instruction(task: str) -> str:
     """Validate a canonical task and place it in OpenVLA's question template."""
 

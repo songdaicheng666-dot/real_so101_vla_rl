@@ -1,0 +1,6 @@
+datasets/so101_t0_100_lowlight_v1/**/*.parquet filter=lfs diff=lfs merge=lfs -text
+datasets/so101_t0_100_lowlight_v1/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+
+# Preserve exported evidence byte-for-byte; CSV files use their original CRLF.
+cloud_runs/**/*.csv -text -diff
+cloud_runs/**/*.log -text -diff

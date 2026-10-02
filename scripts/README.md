@@ -1,5 +1,45 @@
 # Scripts
 
+## SO-101 实机—MuJoCo 对齐标定
+
+版本化参数保存在
+`src/real_so101_vla_rl/assets/mujoco/competition_2026/alignment.yaml`。
+只读采集命令只读取 follower 的 `Present_Position` 和 Orbbec RGB-D；它不会调用
+`configure()`、不会写 `Goal_Position`、不会开关扭矩：
+
+```bash
+conda run --no-capture-output -n lerobot \
+  python scripts/calibrate_so101_alignment.py capture \
+  --output calibration/capture-001
+```
+
+用任务纸源区和 T0 区至少 8 个已知边界点求 overview 外参：
+
+```bash
+python scripts/calibrate_so101_alignment.py solve-pnp \
+  --points calibration/pnp_points.json \
+  --output calibration/pnp_result.json
+```
+
+从 100 条演示按归一化关节距离做最远点抽样，并为单帧生成
+`real / sim_raw / sim_styled / overlay / difference` 与 JSON 指标：
+
+```bash
+python scripts/calibrate_so101_alignment.py select-poses --count 16
+python scripts/calibrate_so101_alignment.py report \
+  --real-rgb calibration/capture-001/overview_rgb.png \
+  --real-depth calibration/capture-001/overview_depth_mm.npy \
+  --state calibration/capture-001/capture.json \
+  --output calibration/report-home
+```
+
+省略 `--real-depth` 时，报告会自动查找 RGB 同目录下的
+`overview_depth_mm.npy`。JSON 使用标准浮点 CIELAB 计算静态纸面 ΔE，并通过
+拟合板面深度、排除动态方块和细线缆来报告机械臂轮廓 IoU。
+
+`calibration/` 作为可复核的标定证据纳入仓库。移动 overview 相机、任务纸或桌面后
+必须重新采集并生成新的 `alignment_id`；不要改写历史 100 条数据及其相机 profile。
+
 ## SO-101 schema-v2 real recording
 
 `record_so101_lerobot.py` is the project-owned synchronized recorder. It uses
@@ -48,8 +88,14 @@ after split/normalization metadata has been generated.
 `finalize_so101_dataset.py` validates the real dataset against both its recording
 and SFT configs. `--validate-only` supports the two-episode inspection gate and
 writes nothing. A full run requires all 20 successful episodes, checks every
-tabular frame plus each episode's first/last media, computes q01/q99 only from
+tabular frame plus each episode's first/middle/last media, computes q01/q99 only from
 the train split, and atomically writes deterministic final metadata:
+
+Validation projects only the numeric columns needed for whole-dataset checks and
+reads first/middle/last media one Parquet file at a time. Each invocation also
+uses a disposable Hugging Face Datasets metadata cache and removes it on exit,
+so repeated checkpoints no longer materialize or accumulate full Arrow copies
+in the user's global cache.
 
 ```bash
 conda run --no-capture-output -n lerobot \
@@ -60,8 +106,23 @@ conda run --no-capture-output -n lerobot \
 ```
 
 The real recording task uses colored cubes and the canonical English instruction
-`Pick up the <color> cube and place it in <slot>.` The MuJoCo grasp demo below
-still uses its existing AAA battery assets and is documented separately.
+`Pick up the <color> cube and place it in <slot>.` The MuJoCo grasp demo now
+uses matching 20 mm, 0.096 kg colored battery-proxy cubes.
+
+The formal low-light T0 collection uses
+`configs/recording/so101_t0_100_lowlight_v1.yaml`. Its deterministic plan has
+100 accepted demonstrations, 25 per color and five per color in every 20-episode
+session. Every attempt still asks the operator to randomize all four cubes inside
+the legal initial area; the displayed scene ID is unique metadata, not a pose to
+reproduce. Rejections and synchronization failures are appended to
+`project_meta/attempts.jsonl` and retry the same planned color.
+
+The recorder stops at the next absolute 20-episode boundary. Use the recording
+command with `--resume` only after the separate finalizer command with explicit
+formal recording and SFT configs has passed `--validate-only`. After episode 100,
+run that finalizer without `--validate-only`; start SFT later with the separate
+`train_openvla_oft_sft.py` entry. The exact soak, canary, resume and finalization
+commands are kept in `configs/recording/README.md`.
 
 ## MuJoCo Basic T0 PPO/GRPO training
 
@@ -100,9 +161,9 @@ GRPO grouping semantics.
 ## MuJoCo T0 interactive grasp demo
 
 `demo_mujoco_t0_grasp.py` loads the Competition 2026 `basic_t0` scene, runs
-the dynamics in real time, and lets you test grasping the four AAA batteries
-with either keyboard commands or the MuJoCo Viewer's right-side actuator
-sliders:
+the dynamics in real time, and lets you test grasping the four 20 mm,
+0.096 kg colored cubes with either keyboard commands or the MuJoCo Viewer's
+right-side actuator sliders:
 
 ```bash
 conda run --no-capture-output -n lerobot \
@@ -113,22 +174,22 @@ Use the top-row numbers to select the matching physical servo ID: `1`
 shoulder pan, `2` shoulder lift, `3` elbow flex, `4` wrist flex, `5` wrist
 roll, and `6` gripper. Press `A` to decrease the selected target (or close the
 gripper) and `D` to increase it (or open the gripper). `Space` pauses/resumes,
-and `Backspace` resets the robot and batteries. The demo automatically undoes
+and `Backspace` resets the robot and cubes. The demo automatically undoes
 the native Viewer visibility toggles attached to `1`-`5`, `A`, and `D`, so
 using them does not hide or alter the rendered model.
 
 The defaults are 2-degree arm increments and 1-degree gripper increments;
 override them with `--joint-step-deg` and `--gripper-step-deg`.
 
-The terminal reports fixed-jaw, moving-jaw, and two-sided battery contacts. A
-battery is reported as lifted after its center rises 10 mm above its initial
+The terminal reports fixed-jaw, moving-jaw, and two-sided cube contacts. A
+cube is reported as lifted after its center rises 10 mm above its initial
 height, and as successfully grasped when it is both lifted and in two-sided
 contact. These messages are diagnostics rather than task rewards.
 
-Manual validation has successfully controlled the robot, closed the gripper,
-grasped an AAA battery, and lifted it in the `basic_t0` scene. The demo is kept
-as a repeatable regression tool for later contact, actuator, and model changes;
-it is not yet a Gymnasium environment or an RL task implementation.
+The archived manual validation grasped and lifted the previous AAA model. It is
+historical control-chain evidence, not validation of the current cube mass and
+contact model. Re-run the same manual check for the cubes; this demo remains a
+regression tool separate from the Gymnasium environment and task rewards.
 
 For a display-free dependency and dynamics check, run:
 
@@ -191,3 +252,14 @@ python scripts/train_openvla_oft_sft.py \\
 
 The full command records every optimizer step in CSV and JSONL, saves the LoRA
 adapter and continuous-action components, and renders `loss_curve.png`.
+
+For a completed formal run, enhanced offline evaluation selects the best finite
+validation checkpoint, verifies its training statistics, evaluates the full
+test split, and writes both evaluation and acceptance reports:
+
+```bash
+python scripts/evaluate_openvla_oft_sft.py \
+  --run-dir /root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug \
+  --cache-dir /root/autodl-tmp/huggingface \
+  --local-files-only
+```

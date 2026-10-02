@@ -41,18 +41,15 @@ class TaskState:
         return next(battery for battery in self.batteries if battery.color == self.target_color)
 
 
-def cylinder_projection_extent(
-    axis: NDArray[np.floating],
+def box_projection_extent(
+    rotation: NDArray[np.floating],
     *,
-    radius: float,
-    half_length: float,
+    half_size: float,
 ) -> NDArray[np.float64]:
-    """Return the XY support extent of an arbitrarily oriented cylinder."""
+    """Return the XY support extent of an arbitrarily oriented cube."""
 
-    axis = np.asarray(axis, dtype=np.float64)
-    axis = axis / max(float(np.linalg.norm(axis)), 1e-12)
-    radial = np.sqrt(np.maximum(0.0, 1.0 - axis[:2] ** 2))
-    return half_length * np.abs(axis[:2]) + radius * radial
+    rotation = np.asarray(rotation, dtype=np.float64).reshape(3, 3)
+    return np.abs(rotation[:2]) @ np.full(3, half_size, dtype=np.float64)
 
 
 class PrivilegedStateBuilder:
@@ -64,14 +61,12 @@ class PrivilegedStateBuilder:
         *,
         target_center_xy: tuple[float, float],
         target_size_xy: tuple[float, float],
-        battery_radius: float,
-        battery_half_length: float,
+        battery_half_size: float,
     ) -> None:
         self.model = model
         self.target_center_xy = np.asarray(target_center_xy, dtype=np.float64)
         self.target_half_size_xy = 0.5 * np.asarray(target_size_xy, dtype=np.float64)
-        self.battery_radius = battery_radius
-        self.battery_half_length = battery_half_length
+        self.battery_half_size = battery_half_size
 
         self.robot_joint_ids = np.asarray(
             [self._id(mujoco.mjtObj.mjOBJ_JOINT, name) for name in (
@@ -168,10 +163,10 @@ class PrivilegedStateBuilder:
             )
 
         target = next(battery for battery in batteries if battery.color == target_color)
-        extent = cylinder_projection_extent(
-            target.axis,
-            radius=self.battery_radius,
-            half_length=self.battery_half_length,
+        target_rotation = data.xmat[self.battery_body_ids[target_color]].reshape(3, 3)
+        extent = box_projection_extent(
+            target_rotation,
+            half_size=self.battery_half_size,
         )
         inside = bool(
             np.all(

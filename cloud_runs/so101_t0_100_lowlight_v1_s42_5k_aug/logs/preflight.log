@@ -1,0 +1,555 @@
+Using SO101 constants:
+  NUM_ACTIONS_CHUNK = 8
+  ACTION_DIM = 6
+  PROPRIO_DIM = 6
+  ACTION_PROPRIO_NORMALIZATION_TYPE = NormalizationType.BOUNDS_Q99
+If needed, manually set the correct constants in `prismatic/vla/constants.py`!
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|███▎      | 1/3 [00:00<00:01,  1.13it/s]Loading checkpoint shards:  67%|██████▋   | 2/3 [00:01<00:00,  1.63it/s]Loading checkpoint shards: 100%|██████████| 3/3 [00:01<00:00,  2.28it/s]Loading checkpoint shards: 100%|██████████| 3/3 [00:01<00:00,  1.95it/s]
+10/02 [03:33:48] WARNING  | >> Could not load libtorchcodec.  import_utils.py:80
+                          Likely causes:                                        
+                                    1. FFmpeg is not properly                   
+                          installed in your environment. We                     
+                          support                                               
+                                       versions 4, 5, 6, 7,                     
+                          and 8, and we attempt to load                         
+                          libtorchcodec                                         
+                                       for each of those                        
+                          versions. Errors for versions not                     
+                          installed on                                          
+                                       your system are                          
+                          expected; only the error for your                     
+                          installed FFmpeg                                      
+                                       version is relevant.                     
+                          On Windows, ensure you've installed                   
+                          the                                                   
+                                       "full-shared" version                    
+                          which ships DLLs.                                     
+                                    2. The PyTorch version                      
+                          (2.7.1+cu128) is not compatible                       
+                          with                                                  
+                                       this version of                          
+                          TorchCodec. Refer to the version                      
+                          compatibility                                         
+                                       table:                                   
+                                       https://github.com/pyt                   
+                          orch/torchcodec?tab=readme-ov-file#                   
+                          installing-torchcodec.                                
+                                    3. Another runtime                          
+                          dependency; see exceptions below.                     
+                                                                                
+                                  The following exceptions                      
+                          were raised as we tried to load                       
+                          libtorchcodec:                                        
+                                                                                
+                                                                                
+                          FFmpeg version 8:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.60: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 7:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.59: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 6:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.58: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 5:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.57: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 4:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavdevice.so.58: cannot                    
+                          open shared object file: No such                      
+                          file or directory                                     
+                          .                                                     
+                          'torchcodec' is installed but                         
+                          cannot be loaded (see the error                       
+                          above). Falling back to 'pyav' as a                   
+                          default decoder.                                      
+10/02 [03:33:49] INFO     | >> Using video codec: hevc              video.py:193
+10/02 [03:35:35] WARNING  | >> Could not load libtorchcodec.  import_utils.py:80
+                          Likely causes:                                        
+                                    1. FFmpeg is not properly                   
+                          installed in your environment. We                     
+                          support                                               
+                                       versions 4, 5, 6, 7,                     
+                          and 8, and we attempt to load                         
+                          libtorchcodec                                         
+                                       for each of those                        
+                          versions. Errors for versions not                     
+                          installed on                                          
+                                       your system are                          
+                          expected; only the error for your                     
+                          installed FFmpeg                                      
+                                       version is relevant.                     
+                          On Windows, ensure you've installed                   
+                          the                                                   
+                                       "full-shared" version                    
+                          which ships DLLs.                                     
+                                    2. The PyTorch version                      
+                          (2.7.1+cu128) is not compatible                       
+                          with                                                  
+                                       this version of                          
+                          TorchCodec. Refer to the version                      
+                          compatibility                                         
+                                       table:                                   
+                                       https://github.com/pyt                   
+                          orch/torchcodec?tab=readme-ov-file#                   
+                          installing-torchcodec.                                
+                                    3. Another runtime                          
+                          dependency; see exceptions below.                     
+                                                                                
+                                  The following exceptions                      
+                          were raised as we tried to load                       
+                          libtorchcodec:                                        
+                                                                                
+                                                                                
+                          FFmpeg version 8:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.60: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 7:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.59: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 6:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.58: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 5:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.57: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 4:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavdevice.so.58: cannot                    
+                          open shared object file: No such                      
+                          file or directory                                     
+                          .                                                     
+                          'torchcodec' is installed but                         
+                          cannot be loaded (see the error                       
+                          above). Falling back to 'pyav' as a                   
+                          default decoder.                                      
+                 INFO     | >> Using video codec: hevc              video.py:193
+10/02 [03:35:46] WARNING  | >> Could not load libtorchcodec.  import_utils.py:80
+                          Likely causes:                                        
+                                    1. FFmpeg is not properly                   
+                          installed in your environment. We                     
+                          support                                               
+                                       versions 4, 5, 6, 7,                     
+                          and 8, and we attempt to load                         
+                          libtorchcodec                                         
+                                       for each of those                        
+                          versions. Errors for versions not                     
+                          installed on                                          
+                                       your system are                          
+                          expected; only the error for your                     
+                          installed FFmpeg                                      
+                                       version is relevant.                     
+                          On Windows, ensure you've installed                   
+                          the                                                   
+                                       "full-shared" version                    
+                          which ships DLLs.                                     
+                                    2. The PyTorch version                      
+                          (2.7.1+cu128) is not compatible                       
+                          with                                                  
+                                       this version of                          
+                          TorchCodec. Refer to the version                      
+                          compatibility                                         
+                                       table:                                   
+                                       https://github.com/pyt                   
+                          orch/torchcodec?tab=readme-ov-file#                   
+                          installing-torchcodec.                                
+                                    3. Another runtime                          
+                          dependency; see exceptions below.                     
+                                                                                
+                                  The following exceptions                      
+                          were raised as we tried to load                       
+                          libtorchcodec:                                        
+                                                                                
+                                                                                
+                          FFmpeg version 8:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.60: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 7:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.59: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 6:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.58: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 5:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavutil.so.57: cannot                      
+                          open shared object file: No such                      
+                          file or directory                                     
+                                                                                
+                          FFmpeg version 4:                                     
+                          Traceback (most recent call last):                    
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          hcodec/_internally_replaced_utils.p                   
+                          y", line 93, in                                       
+                          load_torchcodec_shared_libraries                      
+                              torch.ops.load_library(core_lib                   
+                          rary_path)                                            
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/site-packages/torc                   
+                          h/_ops.py", line 1392, in                             
+                          load_library                                          
+                              ctypes.CDLL(path)                                 
+                            File                                                
+                          "/root/autodl-tmp/envs/so101-openvl                   
+                          a/lib/python3.12/ctypes/__init__.py                   
+                          ", line 379, in __init__                              
+                              self._handle =                                    
+                          _dlopen(self._name, mode)                             
+                                             ^^^^^^^^^^^^^^^^                   
+                          ^^^^^^^^^                                             
+                          OSError: libavdevice.so.58: cannot                    
+                          open shared object file: No such                      
+                          file or directory                                     
+                          .                                                     
+                          'torchcodec' is installed but                         
+                          cannot be loaded (see the error                       
+                          above). Falling back to 'pyav' as a                   
+                          default decoder.                                      
+                 INFO     | >> Using video codec: hevc              video.py:193
+{"model_batch": {"action_is_pad": {"dtype": "torch.bool", "shape": [2, 8]}, "actions": {"dtype": "torch.float32", "shape": [2, 8, 6]}, "attention_mask": {"dtype": "torch.bool", "shape": [2, 75]}, "input_ids": {"dtype": "torch.int64", "shape": [2, 75]}, "labels": {"dtype": "torch.int64", "shape": [2, 75]}, "pixel_values": {"dtype": "torch.float32", "shape": [2, 12, 224, 224]}, "proprio": {"dtype": "torch.float32", "shape": [2, 6]}}}
+{"batch": {"action_is_pad": {"dtype": "torch.bool", "shape": [2, 8]}, "actions": {"dtype": "torch.float32", "shape": [2, 8, 6]}, "attention_mask": {"dtype": "torch.bool", "shape": [2, 75]}, "input_ids": {"dtype": "torch.int64", "shape": [2, 75]}, "labels": {"dtype": "torch.int64", "shape": [2, 75]}, "pixel_values": {"dtype": "torch.float32", "shape": [2, 12, 224, 224]}, "proprio": {"dtype": "torch.float32", "shape": [2, 6]}}, "checkpoint": null, "loss": 0.73828125, "peak_gpu_memory_gib": 15.94, "predicted_actions_shape": [2, 8, 6], "preflight": true}

@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    from real_so101_vla_rl.data import temporary_hf_datasets_cache
     from real_so101_vla_rl.models import load_sft_config
     from real_so101_vla_rl.recording import load_recording_config
     from real_so101_vla_rl.recording.finalization import (
@@ -34,20 +35,21 @@ def main() -> None:
         finalize_recorded_so101_dataset,
     )
 
-    recording_path = Path(args.recording_config)
-    sft_path = Path(args.sft_config)
-    recording_config = load_recording_config(
-        recording_path,
-        require_hardware_ready=False,
-    )
-    sft_config = load_sft_config(sft_path)
-    summary = finalize_recorded_so101_dataset(
-        recording_config,
-        sft_config,
-        validate_only=args.validate_only,
-        recording_config_sha256=file_sha256(recording_path),
-        sft_config_sha256=file_sha256(sft_path),
-    )
+    with temporary_hf_datasets_cache():
+        recording_path = Path(args.recording_config)
+        sft_path = Path(args.sft_config)
+        recording_config = load_recording_config(
+            recording_path,
+            require_hardware_ready=False,
+        )
+        sft_config = load_sft_config(sft_path)
+        summary = finalize_recorded_so101_dataset(
+            recording_config,
+            sft_config,
+            validate_only=args.validate_only,
+            recording_config_sha256=file_sha256(recording_path),
+            sft_config_sha256=file_sha256(sft_path),
+        )
     print(json.dumps(summary.to_dict(), indent=2, sort_keys=True))
 
 

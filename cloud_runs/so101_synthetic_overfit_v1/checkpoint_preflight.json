@@ -1,0 +1,13 @@
+{
+  "checkpoint": "/root/autodl-tmp/runs/so101_synthetic_overfit_v1/checkpoint-000200",
+  "local_files_only": true,
+  "loss": 0.024658203125,
+  "peak_gpu_memory_gib": 15.34,
+  "predicted_actions_shape": [
+    2,
+    8,
+    6
+  ],
+  "preflight": true,
+  "source_archive_sha256": "4eae25e1b00952a928c72401340e0205b68e0acdd643814932e44d2c192afa2d"
+}

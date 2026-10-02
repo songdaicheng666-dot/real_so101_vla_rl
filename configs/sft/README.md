@@ -92,3 +92,23 @@ python scripts/train_openvla_oft_sft.py \
 
 训练加载器会核对 `splits.json` 中的策略；pilot 数据不能被误用为正式的
 `full_task_layout_v1` 数据集。
+
+## T0 四色 100 条正式数据集
+
+`openvla_oft_t0_100_lowlight.yaml` 与
+`configs/recording/so101_t0_100_lowlight_v1.yaml` 配对，使用
+`t0_color_stratified_v1`。正式定稿要求红、黄、蓝、绿各 25 条成功 T0
+示范，并把每色 20/2/3 条分到 train/val/test，总计 80/8/12。
+
+该文件有意只固定数据、模型、LoRA 和优化器合同；`max_steps`、batch size、
+梯度累积、worker、评估/保存间隔及输出目录仍为 `null`。因此数据定稿可以
+使用它验证 repo、split 和归一化键，但在确定正式训练资源与步数前，
+`require_training_ready=True` 会拒绝启动训练。录制、定稿和 SFT 继续由
+三个独立入口执行。
+
+`openvla_oft_t0_100_lowlight_s42_5k_aug.yaml` 是对应的正式云端运行配置：
+seed 42、5,000 optimizer step、batch size 2，每 500 step 验证和保存，保留
+10 个 checkpoint。图像增强仅在 train split 启用；val/test 始终使用确定性
+模型预处理。训练完成后用 `scripts/evaluate_openvla_oft_sft.py` 自动选择最低
+有限 val loss 的 checkpoint，输出按颜色、关节、预测步拆分的归一化 MAE、
+关节物理单位 MAE，以及 `acceptance_report.json`。

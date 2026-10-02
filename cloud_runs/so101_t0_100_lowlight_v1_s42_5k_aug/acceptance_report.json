@@ -1,0 +1,203 @@
+{
+  "artifact_sha256": {
+    "config.yaml": {
+      "bytes": 1538,
+      "path": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/config.yaml",
+      "sha256": "4b98eccb67966ad51cced16f82b0f929b2e7f320b6e82cb1bb3b2466a16399d2"
+    },
+    "evaluation_report.json": {
+      "bytes": 8321,
+      "path": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/evaluation_report.json",
+      "sha256": "c0e07566b770696090954944b529e28a9795d7af395461b935a546cc3a5338ab"
+    },
+    "loss_curve.png": {
+      "bytes": 19752,
+      "path": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/loss_curve.png",
+      "sha256": "04db523f4841031132597e5dff90061b3e24457c1be217de8261c706912f23e2"
+    },
+    "metrics.csv": {
+      "bytes": 385897,
+      "path": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/metrics.csv",
+      "sha256": "8f40504bebfb04522c8c5813efa4ac24ccd55927a4247887ad5c8ca7b1273a7b"
+    },
+    "metrics.jsonl": {
+      "bytes": 920781,
+      "path": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/metrics.jsonl",
+      "sha256": "4632f5781eab02241600e7d06876ddf83f8e2a1f79e7f6ab7e1c1a35439348b9"
+    },
+    "preflight.log": {
+      "bytes": 45867,
+      "path": "/root/autodl-tmp/run_control/so101_t0_100_lowlight_v1_s42_5k_aug/preflight.log",
+      "sha256": "0e70831043acc4172abd85dac00ea02d3d10fa7070ec179eeefa0150d3b4656a"
+    },
+    "run_manifest.json": {
+      "bytes": 5060,
+      "path": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/run_manifest.json",
+      "sha256": "788aebd2446338a2c07b23db6cb86cd3ea65d5ce263dbdf9e49ad9478006d1f8"
+    },
+    "source_tests.log": {
+      "bytes": 100,
+      "path": "/root/autodl-tmp/run_control/so101_t0_100_lowlight_v1_s42_5k_aug/source_tests.log",
+      "sha256": "3a8f4ca313ff0d6bf7c8636e0583ef2154aa5d24760e11c852bb2d3bde76896f"
+    },
+    "training.log": {
+      "bytes": 970068,
+      "path": "/root/autodl-tmp/run_control/so101_t0_100_lowlight_v1_s42_5k_aug/training.log",
+      "sha256": "93600083a55f5ee4d1e824d3adf1711d3dafeaf25d953c4d1c04e861b897c051"
+    }
+  },
+  "best_checkpoint": {
+    "path": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/checkpoint-004500",
+    "step": 4500,
+    "tree_sha256": "efb1dd7786cd0d17564d7df615ed00c36719e0b639a9e6101c788d9ac6404bcf",
+    "val_loss": 0.05762343319402558
+  },
+  "checkpoint_sha256_algorithm": "relative_path_nul_content_nul_v1",
+  "checks": [
+    {
+      "details": {
+        "actual": 5000,
+        "expected": 5000
+      },
+      "name": "training_steps_contiguous",
+      "passed": true
+    },
+    {
+      "details": {
+        "rows": 5000
+      },
+      "name": "training_metrics_finite",
+      "passed": true
+    },
+    {
+      "details": {
+        "actual": [
+          500,
+          1000,
+          1500,
+          2000,
+          2500,
+          3000,
+          3500,
+          4000,
+          4500,
+          5000
+        ],
+        "expected": [
+          500,
+          1000,
+          1500,
+          2000,
+          2500,
+          3000,
+          3500,
+          4000,
+          4500,
+          5000
+        ]
+      },
+      "name": "validation_schedule_complete",
+      "passed": true
+    },
+    {
+      "details": {
+        "actual": [
+          500,
+          1000,
+          1500,
+          2000,
+          2500,
+          3000,
+          3500,
+          4000,
+          4500,
+          5000
+        ],
+        "expected": [
+          500,
+          1000,
+          1500,
+          2000,
+          2500,
+          3000,
+          3500,
+          4000,
+          4500,
+          5000
+        ]
+      },
+      "name": "checkpoints_complete",
+      "passed": true
+    },
+    {
+      "details": {
+        "first_100_mean": 0.6832421875,
+        "last_100_mean": 0.043211669921875
+      },
+      "name": "training_loss_improved",
+      "passed": true
+    },
+    {
+      "details": {
+        "entries": 49
+      },
+      "name": "enhanced_evaluation_complete",
+      "passed": true
+    },
+    {
+      "details": {
+        "actual": [
+          [
+            2,
+            8,
+            6
+          ]
+        ]
+      },
+      "name": "checkpoint_preflight_shape",
+      "passed": true
+    },
+    {
+      "details": {
+        "checkpoint": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/checkpoint-004500"
+      },
+      "name": "checkpoint_statistics_match",
+      "passed": true
+    },
+    {
+      "details": {
+        "test": 12,
+        "train": 80,
+        "val": 8
+      },
+      "name": "dataset_split_contract",
+      "passed": true
+    },
+    {
+      "details": {
+        "dataset_sha256": "57a347891fea3dd3c45409b62b1a79c1bef55ab4467712ddcc98994c60ea99f5",
+        "source_archive_sha256": "dee306a601ba2b3e3a63e45f0da1878c8e2c2cefbcf9916bc37b8def74a92b66",
+        "source_tree_sha256": "c7f0ade9b6296acfae442bc405e2b7916bd948d70579948db363b7503d08f459"
+      },
+      "name": "source_and_data_fingerprints_present",
+      "passed": true
+    },
+    {
+      "details": {
+        "missing": []
+      },
+      "name": "lightweight_artifacts_complete",
+      "passed": true
+    }
+  ],
+  "final_checkpoint": {
+    "path": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug/checkpoint-005000",
+    "same_as_best": false,
+    "step": 5000,
+    "tree_sha256": "d946688892a90708614c4773921218af89fd481a5d7577d3e3bc46c1fa0fb4f9"
+  },
+  "generated_at": "2026-10-02T01:54:22.402605+00:00",
+  "run_dir": "/root/autodl-tmp/runs/so101_t0_100_lowlight_v1_s42_5k_aug",
+  "schema_version": 1,
+  "status": "pass"
+}
