@@ -20,6 +20,7 @@ from real_so101_vla_rl.alignment import (
     load_alignment,
     real_state_to_mujoco_qpos,
     reset_to_home_keyframe,
+    validate_mujoco_joint_refs,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -386,6 +387,7 @@ def _report(args: argparse.Namespace) -> None:
     )
     qpos = real_state_to_mujoco_qpos(state, alignment=alignment)
     model = mujoco.MjModel.from_xml_path(str(SCENE_PATH))
+    validate_mujoco_joint_refs(model, alignment=alignment)
     data = mujoco.MjData(model)
     reset_to_home_keyframe(model, data)
     data.qpos[:6] = qpos

@@ -22,7 +22,7 @@ action chunk、分阶段奖励、终止条件以及 PPO/GRPO baseline；目标�
 
 - `source/challenge_task_board_2026.pdf`：原始双页底图留档。
 - `layouts.yaml`：物理尺寸、坐标、颜色和纹理生成参数的唯一数据源。
-- `alignment.yaml`：底座、关节零偏与范围、Orbbec 内外参、灯光和后处理版本。
+- `alignment.yaml`：底座、真机关节中位读数与范围、Orbbec 内外参、灯光和后处理版本。
 - `textures/basic_t0.png`：电池摆放区 + T0，`2800×2200` RGB。
 - `textures/sequence_p1_p2_p3.png`：电池摆放区 + P1/P2/P3，`2800×2200` RGB。
 - `so101_competition.xml`：基于 Menagerie 模型的比赛坐标适配层。
@@ -84,9 +84,19 @@ wrist_roll
 gripper
 ```
 
-vendored 原件保持不变。项目自有的 `so101_competition.xml` 只调整网格路径，并将
+vendored 原件保持不变。项目自有的 `so101_competition.xml` 调整网格路径，并将
 机械臂根基座绕世界 `z` 轴旋转 `+90°`，使模型自身的 `+x` 前向与任务底图的
-世界 `+y` 对齐。基座根节为 `(0, 0.035365, 0)`，使朝任务区的前端与 `y=+0.100 m` 切线对齐。两个场景均用完整 `home` keyframe 复位，该姿态由实机零位通过零偏映射而来，不再使用 Menagerie 的全零 `qpos0`。外壳材质为微暖白色，黑色舵机材质保持不变。
+世界 `+y` 对齐。基座根节为 `(0, 0.035365, 0)`，使朝任务区的前端与 `y=+0.100 m` 切线对齐。
+前五轴 `ref` 为真机标定中位的 LeRobot 读数；真机角度数值直接对应 MuJoCo `qpos`
+角度数值，夹爪按 `1% → 1°`。两个场景的完整 `home` keyframe 使用记录的真机
+起始读数作为关节位置和控制目标。夹爪原有约 `-10～100°` 的关节与控制限位保持不变。
+外壳材质为微暖白色，黑色舵机材质保持不变。
+
+离线验证发现，记录的真机起始读数在当前场景中使夹爪碰撞体与底板最大穿透约
+`9 mm`；位置控制器推进后，肩抬会偏离起始目标约 `3.7°`。数值坐标已经对齐，
+但该起始姿态的碰撞几何还需单独校准，不能用关节零偏掩盖这一问题。
+使用原始真机采集重新生成的 `calibration/live-home-v1/report`，机械臂轮廓 IoU
+约为 `0.37`；这份报告不能作为全工作区几何吻合的验收证据。
 
 ## 电池代理方块模型
 
@@ -143,6 +153,24 @@ conda run -n lerobot python scripts/generate_competition_2026_boards.py
 对 TrueType Collection 还可用 `--font-index` 选择 SC 字体面；系统默认 TTC 的 SC 索引为 2。
 
 ## 人工验收
+
+### 真机带动单臂仿真：关节方向目视检查
+
+在项目根目录、已安装 LeRobot 与 MuJoCo 的 `lerobot` 环境中运行：
+
+```bash
+python scripts/demo_so101_live_mirror.py
+```
+
+脚本使用 `configs/recording/so101_t0_100_lowlight_v1.yaml` 中的 follower 串口；
+串口不同可加 `--port /dev/ttyACM0`。它先核对舵机内标定与
+`calibration/lerobot/robots/so_follower/my_follower_arm.json`，再提示托住机械臂。
+按 Enter 后脚本关闭六轴扭矩，约每秒读取 20 次真机关节位置，并直接刷新最简
+MuJoCo 单臂姿态。关闭窗口会断开串口，扭矩保持关闭。运行时不向真机下发位置目标。
+
+默认使用正式转换接口：前五轴真机度数与仿真角度数值相同，夹爪百分数与仿真
+角度数值相同。按 `1～5` 选择关节、`F` 临时翻转所选关节的显示方向、`P` 打印
+六轴真机与仿真角度。`F` 仅用于目视诊断，不修改正式映射参数。
 
 现存人工验收截图记录的是旧 AAA 圆柱模型：`basic_t0` 交互 Demo 当时已完成机械臂
 控制、夹爪闭合和电池抓取/抬升，可作为控制链路的历史回归基线。

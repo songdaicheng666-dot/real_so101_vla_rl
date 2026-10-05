@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -43,13 +42,16 @@ def load_alignment(path: str | Path = ALIGNMENT_PATH) -> dict[str, Any]:
     alignment_path = Path(path).resolve()
     with alignment_path.open(encoding="utf-8") as stream:
         config = yaml.safe_load(stream)
-    if config.get("schema_version") != 1:
+    if config.get("schema_version") != 2:
         raise ValueError("unsupported alignment schema")
     if not str(config.get("alignment_id", "")).strip():
         raise ValueError("alignment_id must be non-empty")
     joints = config["robot"]["joints"]
     if tuple(joints) != JOINT_NAMES:
         raise ValueError(f"alignment joint order differs: {tuple(joints)}")
+    joint_ref = np.asarray(config["robot"]["joint_ref_deg"], dtype=np.float64)
+    if joint_ref.shape != (5,) or not np.all(np.isfinite(joint_ref)):
+        raise ValueError("alignment must contain five finite joint references")
     camera = config["overview_camera"]
     if camera["resolution"] != [640, 480]:
         raise ValueError("overview alignment must use 640x480")
@@ -69,33 +71,20 @@ def real_state_to_mujoco_qpos(
     *,
     alignment: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Map LeRobot degrees/percent to MuJoCo radians without silent clipping."""
+    """Convert LeRobot degrees/percent numerically to MuJoCo radians.
+
+    The first five joint references are encoded in the MJCF ``ref`` values,
+    not subtracted here. Gripper percent is treated as the same number of
+    degrees. This conversion does not clip model outputs.
+    """
 
     config = alignment or load_alignment()
+    if config.get("schema_version") != 2:
+        raise ValueError("unsupported alignment schema")
     values = np.asarray(state, dtype=np.float64)
     if values.shape != (6,) or not np.all(np.isfinite(values)):
         raise ValueError("real SO-101 state must contain six finite values")
-    robot = config["robot"]
-    offsets = np.asarray(robot["zero_offsets_deg"][:5], dtype=np.float64)
-    qpos = np.empty(6, dtype=np.float64)
-    qpos[:5] = np.deg2rad(values[:5] - offsets)
-    gripper = robot["gripper_mapping"]
-    physical_min, physical_max = gripper["physical_percent"]
-    sim_min, sim_max = gripper["mujoco_deg"]
-    qpos[5] = math.radians(
-        sim_min
-        + (values[5] - physical_min)
-        * (sim_max - sim_min)
-        / (physical_max - physical_min)
-    )
-    limits = np.deg2rad(np.asarray(robot["mujoco_ranges_deg"], dtype=np.float64))
-    outside = np.flatnonzero((qpos < limits[:, 0] - 1e-10) | (qpos > limits[:, 1] + 1e-10))
-    if outside.size:
-        details = ", ".join(
-            f"{JOINT_NAMES[index]}={values[index]:.6g}" for index in outside
-        )
-        raise ValueError(f"real state maps outside calibrated MuJoCo limits: {details}")
-    return qpos
+    return np.deg2rad(values)
 
 
 def mujoco_qpos_to_real_state(
@@ -106,26 +95,40 @@ def mujoco_qpos_to_real_state(
     """Invert :func:`real_state_to_mujoco_qpos`."""
 
     config = alignment or load_alignment()
+    if config.get("schema_version") != 2:
+        raise ValueError("unsupported alignment schema")
     values = np.asarray(qpos, dtype=np.float64)
     if values.shape != (6,) or not np.all(np.isfinite(values)):
         raise ValueError("MuJoCo qpos must contain six finite values")
-    robot = config["robot"]
-    result = np.empty(6, dtype=np.float64)
-    result[:5] = np.rad2deg(values[:5]) + np.asarray(
-        robot["zero_offsets_deg"][:5], dtype=np.float64
-    )
-    gripper = robot["gripper_mapping"]
-    physical_min, physical_max = gripper["physical_percent"]
-    sim_min, sim_max = gripper["mujoco_deg"]
-    result[5] = physical_min + (
-        np.rad2deg(values[5]) - sim_min
-    ) * (physical_max - physical_min) / (sim_max - sim_min)
-    return result
+    return np.rad2deg(values)
 
 
 def home_qpos(*, alignment: dict[str, Any] | None = None) -> np.ndarray:
     config = alignment or load_alignment()
-    return np.deg2rad(np.asarray(config["robot"]["home_mujoco_deg"], dtype=np.float64))
+    return real_state_to_mujoco_qpos(
+        config["robot"]["current_real_home_deg_or_percent"], alignment=config
+    )
+
+
+def validate_mujoco_joint_refs(
+    model: Any, *, alignment: dict[str, Any] | None = None
+) -> None:
+    """Fail if the robot model's physical reference differs from calibration."""
+
+    import mujoco
+
+    config = alignment or load_alignment()
+    expected = np.deg2rad(
+        np.asarray((*config["robot"]["joint_ref_deg"], 0.0), dtype=np.float64)
+    )
+    actual = np.empty(6, dtype=np.float64)
+    for index, name in enumerate(JOINT_NAMES):
+        joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+        if joint_id < 0:
+            raise RuntimeError(f"MuJoCo model has no {name!r} joint")
+        actual[index] = model.qpos0[model.jnt_qposadr[joint_id]]
+    if not np.allclose(actual, expected, rtol=0.0, atol=1e-9):
+        raise RuntimeError("MuJoCo joint refs differ from alignment.yaml")
 
 
 def reset_to_home_keyframe(model: Any, data: Any, *, key_name: str = "home") -> None:

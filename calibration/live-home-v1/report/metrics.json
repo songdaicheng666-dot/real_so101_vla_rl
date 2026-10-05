@@ -1,6 +1,6 @@
 {
-  "alignment_id": "so101_comp2026_overview_pnp8_v1",
-  "alignment_sha256": "92bf804063de99580d718c67ec034f44d5321ad494954f206ea488b632b49937",
+  "alignment_id": "so101_comp2026_overview_pnp8_jointref_v2",
+  "alignment_sha256": "462c4534ecd04cacdcf61b76af7558af320b0f45270a3567479170318943341c",
   "state_deg_or_percent": [
     -7.252747252747253,
     -104.0,
@@ -10,21 +10,21 @@
     0.20325203252032523
   ],
   "mujoco_qpos_rad": [
-    0.01695111696195682,
-    -1.1310308834388663,
-    1.2758313975517424,
-    1.166594196082522,
-    0.6908846455432447,
-    -0.1706307663026977
+    -0.12658431937541292,
+    -1.8151424220741028,
+    1.6808863257668465,
+    1.2865569914701056,
+    -0.0038358884659216034,
+    0.003547417178850264
   ],
   "sensor_noise": false,
-  "mean_absolute_rgb_255": 20.369340896606445,
-  "static_paper_pixel_count": 131292,
-  "static_brightness_mean_error_255": 0.4554047466715474,
-  "static_lab_median_delta": 5.973138332366943,
-  "robot_silhouette_iou": 0.5645604395604396,
+  "mean_absolute_rgb_255": 20.116193771362305,
+  "static_paper_pixel_count": 131308,
+  "static_brightness_mean_error_255": 0.45262537951484205,
+  "static_lab_median_delta": 5.971858024597168,
+  "robot_silhouette_iou": 0.36997575134102434,
   "real_robot_mask_pixels": 8870,
-  "sim_robot_mask_pixels": 9354,
+  "sim_robot_mask_pixels": 9774,
   "robot_depth_above_board_threshold_mm": 6.0,
   "silhouette_depth_source": "calibration/live-home-v1/overview_depth_mm.npy"
 }

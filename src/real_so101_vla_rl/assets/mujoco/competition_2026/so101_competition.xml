@@ -5,6 +5,8 @@
     - meshdir points to the immutable vendored Menagerie mesh directory;
     - the root base is rotated +90 degrees around world z so model +x aligns
       with the competition board's +y task direction.
+    - the first five joint refs equal the LeRobot readings at the calibrated
+      half-turn pose; qpos and position controls keep the recorded coordinates.
 
     Local modifications of the MuJoCo Menagerie robotstudio_so101 model (Apache 2.0):
     1. Wrist camera physical intrinsics (sensorsize/focal) removed and an explicit
@@ -118,7 +120,7 @@
       <!-- Link shoulder -->
       <body name="shoulder" pos="0.0388353 0 0.0624" quat="0 0 -1 0">
         <!-- Joint from base to shoulder -->
-        <joint axis="0 0 1" name="shoulder_pan" type="hinge" range="-2.0966966355 2.0966966355" class="sts3215"/>
+        <joint axis="0 0 1" name="shoulder_pan" type="hinge" ref="-0.003835888466" range="-2.0966966355 2.0966966355" class="sts3215"/>
         <inertial pos="-0.0307604 -1.7e-05 -0.0252713" mass="0.100006"
           fullinertia="8.3759e-05 8.10403e-05 2.39783e-05 7.55525e-08 -1.16342e-06 1.54663e-07"/>
         <!-- Part sts3215_03a_v1_2 -->
@@ -135,7 +137,7 @@
         <!-- Link upper_arm -->
         <body name="upper_arm" pos="-0.0303992 -0.0182778 -0.0542" quat="1 -1 -1 -1">
           <!-- Joint from shoulder to upper_arm -->
-          <joint axis="0 0 1" name="shoulder_lift" type="hinge" range="-1.8350890421 1.8350890421" class="sts3215"/>
+          <joint axis="0 0 1" name="shoulder_lift" type="hinge" ref="0.030687107727" range="-1.8350890421 1.8350890421" class="sts3215"/>
           <inertial pos="-0.089847 -0.008382 0.018409" mass="0.103"
             fullinertia="4.08002e-05 0.000147318 0.000142487 -1.97819e-05 -4.03016e-08 8.97326e-09"/>
           <!-- Part sts3215_03a_v1_3 -->
@@ -150,7 +152,7 @@
           <body name="lower_arm" pos="-0.11257 -0.028 0" quat="1 0 0 1">
             <!-- Joint from upper_arm to lower_arm -->
             <!-- Note: 5-degree calibration offset applied to joint range -->
-            <joint axis="0 0 1" name="elbow_flex" type="hinge" range="-1.7008329458 1.7008329458" class="sts3215"/>
+            <joint axis="0 0 1" name="elbow_flex" type="hinge" ref="0.020713797716" range="-1.7008329458 1.7008329458" class="sts3215"/>
             <inertial pos="-0.098070 0.0032438 0.018283" mass="0.104"
               fullinertia="2.87438e-05 0.000159844 0.00014529 7.41152e-06 1.26409e-06 -4.90188e-08"/>
             <!-- Part under_arm_so101_v1 -->
@@ -167,7 +169,7 @@
             <!-- Link wrist -->
             <body name="wrist" pos="-0.1349 0.0052 0" quat="1 0 0 -1">
               <!-- Joint from lower_arm to wrist -->
-              <joint axis="0 0 1" name="wrist_flex" type="hinge" range="-1.8113065336 1.8113065336" class="sts3215"/>
+              <joint axis="0 0 1" name="wrist_flex" type="hinge" ref="0.020713797716" range="-1.8113065336 1.8113065336" class="sts3215"/>
               <inertial pos="-0.000103312 -0.0386143 0.0281156" mass="0.079"
                 fullinertia="3.68263e-05 2.5391e-05 2.1e-05 1.7893e-08 -5.28128e-08 3.6412e-06"/>
               <!-- Part sts3215_03a_no_horn_v1 -->
@@ -181,7 +183,7 @@
               <!-- Link gripper -->
               <body name="gripper" pos="5.55112e-17 -0.0611 0.0181" quat="0.0172091 -0.0172091 0.706897 0.706897">
                 <!-- Joint from wrist to gripper -->
-                <joint axis="0 0 1" name="wrist_roll" type="hinge" range="-3.1415926536 3.1415926536" class="sts3215"/>
+                <joint axis="0 0 1" name="wrist_roll" type="hinge" ref="-0.000767177693" range="-3.1415926536 3.1415926536" class="sts3215"/>
                 <inertial pos="0.000214 0.000245 -0.025187" mass="0.087"
                   fullinertia="2.75087e-05 4.33657e-05 3.45059e-05 -3.35241e-07 -5.7352e-06 -5.17847e-08"/>
                 <!-- Part sts3215_03a_v1_5 -->

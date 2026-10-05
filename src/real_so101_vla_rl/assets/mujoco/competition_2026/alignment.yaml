@@ -1,6 +1,6 @@
-schema_version: 1
-alignment_id: so101_comp2026_overview_pnp8_v1
-created_from: current_follower_home_and_overview_2026-09-30
+schema_version: 2
+alignment_id: so101_comp2026_overview_pnp8_jointref_v2
+created_from: current_follower_homing_and_overview_2026-10-04
 
 input_provenance:
   camera_profile:
@@ -26,9 +26,8 @@ base:
 robot:
   joints: [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper]
   current_real_home_deg_or_percent: [-7.2527472527, -104.0, 96.3076923077, 73.7142857143, -0.2197802198, 0.2032520325]
-  # physical reading minus MuJoCo angle; gripper uses the affine mapping below.
-  zero_offsets_deg: [-8.2239747127, -39.19670388, 23.2079378577, 6.8733618743, -39.8045545398, 0.0]
-  home_mujoco_deg: [0.97122746, -64.80329612, 73.09975445, 66.84092384, 39.58477432, -9.7764227642]
+  # LeRobot readings at calibrated encoder position 2047; MJCF ref matches these.
+  joint_ref_deg: [-0.219780219780, 1.758241758242, 1.186813186813, 1.186813186813, -0.043956043956]
   physical_ranges_deg_or_percent:
     - [-120.1318681319, 120.1318681319]
     - [-105.1428571429, 105.1428571429]
@@ -36,7 +35,7 @@ robot:
     - [-103.7802197802, 103.7802197802]
     - [-180.0, 180.0]
     - [0.0, 100.0]
-  # MuJoCo uses calibrated physical travel; offsets only transform readings.
+  # Existing MJCF joint and actuator limits; this update does not change them.
   mujoco_ranges_deg:
     - [-120.1318681319, 120.1318681319]
     - [-105.1428571429, 105.1428571429]
@@ -44,9 +43,6 @@ robot:
     - [-103.7802197802, 103.7802197802]
     - [-180.0, 180.0]
     - [-10.0, 100.0]
-  gripper_mapping:
-    physical_percent: [0.0, 100.0]
-    mujoco_deg: [-10.0, 100.0]
 
 overview_camera:
   resolution: [640, 480]

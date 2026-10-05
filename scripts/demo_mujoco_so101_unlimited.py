@@ -140,7 +140,7 @@ def load_unlimited_robot() -> tuple[mujoco.MjModel, mujoco.MjData]:
 
 
 def reset_robot(model: mujoco.MjModel, data: mujoco.MjData) -> None:
-    """Restore the standalone model's zero qpos and hold every joint there."""
+    """Restore the standalone model's reference pose and hold every joint there."""
     mujoco.mj_resetData(model, data)
     for actuator_id in range(model.nu):
         joint_id = int(model.actuator_trnid[actuator_id, 0])
@@ -340,7 +340,7 @@ def run_interactive(
                         print("[仿真] 已暂停" if paused else "[仿真] 已继续")
                     elif keycode == RESET_KEY:
                         reset_robot(model, data)
-                        print("[复位] 六轴、速度和控制目标已恢复零姿态")
+                        print("[复位] 六轴、速度和控制目标已恢复参考姿态")
                         print_status_now = True
                     elif keycode == STATUS_KEY:
                         print_status_now = True

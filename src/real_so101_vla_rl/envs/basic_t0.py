@@ -15,8 +15,10 @@ from gymnasium.utils import seeding
 
 from real_so101_vla_rl.alignment import (
     OverviewSensorModel,
+    home_qpos,
     load_alignment,
     reset_to_home_keyframe,
+    validate_mujoco_joint_refs,
 )
 from real_so101_vla_rl.envs.base import BatteryReset, ResetSnapshot
 from real_so101_vla_rl.envs.components import (
@@ -98,10 +100,25 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
         self.data = mujoco.MjData(self.model)
         self._validate_model()
         self.alignment = load_alignment()
+        validate_mujoco_joint_refs(self.model, alignment=self.alignment)
         self.alignment_id = str(self.alignment["alignment_id"])
         self._home_key_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_KEY, "home"
         )
+        if self._home_key_id < 0 or not np.allclose(
+            self.model.key_qpos[self._home_key_id, :6],
+            home_qpos(alignment=self.alignment),
+            rtol=0.0,
+            atol=1e-9,
+        ):
+            raise RuntimeError("scene home keyframe differs from recorded real home")
+        if not np.allclose(
+            self.model.key_ctrl[self._home_key_id, :6],
+            home_qpos(alignment=self.alignment),
+            rtol=0.0,
+            atol=1e-9,
+        ):
+            raise RuntimeError("scene home control differs from recorded real home")
         reset_to_home_keyframe(self.model, self.data)
         self.action_chunk_size = action_chunk_size
         self.action_size = self.model.nu

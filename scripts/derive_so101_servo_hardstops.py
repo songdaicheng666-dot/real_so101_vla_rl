@@ -1,0 +1,648 @@
+"""Derive SO-101 servo-housing hard-stop candidates from exact STL triangles.
+
+Install the optional calibration dependencies before running this developer
+tool::
+
+    pip install -e '.[hardstop-calibration]'
+
+The interactive hard-stop demo does not import these dependencies.  It uses
+the local contact patches generated from this tool's JSON output.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+try:
+    import fcl
+    import mujoco
+    import numpy as np
+    import trimesh
+    from scipy.spatial import cKDTree
+except ModuleNotFoundError as exc:
+    raise SystemExit(
+        "Exact hard-stop derivation dependencies are missing. "
+        "Install them with: pip install -e '.[hardstop-calibration]'"
+    ) from exc
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ROBOT_PATH = (
+    PROJECT_ROOT
+    / "src"
+    / "real_so101_vla_rl"
+    / "assets"
+    / "mujoco"
+    / "competition_2026"
+    / "so101_competition.xml"
+)
+ASSET_DIR = ROBOT_PATH.parents[1] / "SO101_menagerie" / "assets"
+JOINT_NAMES = (
+    "shoulder_pan",
+    "shoulder_lift",
+    "elbow_flex",
+    "wrist_flex",
+    "wrist_roll",
+    "gripper",
+)
+SERVO_COLLISION_MESH = "sts3215_03a_no_horn_v1"
+PATCH_HALF_THICKNESS_M = 0.0015
+
+
+@dataclass(frozen=True)
+class ServoShellPair:
+    joint: str
+    servo_number: int
+    servo_body: str
+    white_body: str
+    white_mesh: str
+
+
+SERVO_SHELL_PAIRS = (
+    ServoShellPair(
+        "shoulder_pan",
+        1,
+        "base",
+        "shoulder",
+        "motor_holder_so101_base_v1",
+    ),
+    ServoShellPair(
+        "shoulder_pan",
+        1,
+        "base",
+        "shoulder",
+        "rotation_pitch_so101_v1",
+    ),
+    ServoShellPair(
+        "shoulder_lift",
+        2,
+        "shoulder",
+        "upper_arm",
+        "upper_arm_so101_v1",
+    ),
+    ServoShellPair(
+        "elbow_flex",
+        3,
+        "upper_arm",
+        "lower_arm",
+        "under_arm_so101_v1",
+    ),
+    ServoShellPair(
+        "elbow_flex",
+        3,
+        "upper_arm",
+        "lower_arm",
+        "motor_holder_so101_wrist_v1",
+    ),
+    # Rotating joint 3 can bring its distal bracket into the housing of
+    # upstream servo 2.  Limiting scans to joint 3's own housing misses this
+    # physical stop.
+    ServoShellPair(
+        "elbow_flex",
+        2,
+        "shoulder",
+        "lower_arm",
+        "under_arm_so101_v1",
+    ),
+    ServoShellPair(
+        "elbow_flex",
+        2,
+        "shoulder",
+        "lower_arm",
+        "motor_holder_so101_wrist_v1",
+    ),
+    ServoShellPair(
+        "wrist_flex",
+        4,
+        "lower_arm",
+        "wrist",
+        "wrist_roll_pitch_so101_v2",
+    ),
+    ServoShellPair(
+        "wrist_roll",
+        5,
+        "wrist",
+        "gripper",
+        "wrist_roll_follower_so101_v1",
+    ),
+    ServoShellPair(
+        "gripper",
+        6,
+        "gripper",
+        "moving_jaw_so101_v1",
+        "moving_jaw_so101_v1",
+    ),
+)
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a finite number greater than zero")
+    return parsed
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Scan exact servo and adjacent-shell triangles for hard stops.",
+    )
+    parser.add_argument(
+        "--step-deg",
+        type=_positive_float,
+        default=0.25,
+        help="coarse angular scan step (default: 0.25 degrees)",
+    )
+    parser.add_argument(
+        "--neutral-deg",
+        type=_positive_float,
+        default=2.0,
+        help="half-width used to identify persistent mounting overlap (default: 2)",
+    )
+    parser.add_argument(
+        "--overlap-margin-mm",
+        type=_positive_float,
+        default=0.5,
+        help="triangle-neighbour dilation around mounting overlap (default: 0.5)",
+    )
+    parser.add_argument(
+        "--verify-runtime",
+        action="store_true",
+        help="check derived endpoints/statuses against the interactive demo constants",
+    )
+    return parser.parse_args(argv)
+
+
+def _build_ref_zero_model() -> tuple[mujoco.MjModel, mujoco.MjData]:
+    spec = mujoco.MjSpec.from_file(str(ROBOT_PATH))
+    for joint_name in JOINT_NAMES:
+        joint = spec.joint(joint_name)
+        if joint is None:
+            raise RuntimeError(f"missing joint: {joint_name}")
+        joint.ref = 0.0
+    model = spec.compile()
+    model.jnt_limited[:] = False
+    model.actuator_ctrllimited[:] = False
+    return model, mujoco.MjData(model)
+
+
+def _name(model: mujoco.MjModel, object_type: int, object_id: int) -> str:
+    name = mujoco.mj_id2name(model, object_type, object_id)
+    if not name:
+        raise RuntimeError(f"unnamed MuJoCo object: type={object_type}, id={object_id}")
+    return name
+
+
+def _mesh_name(model: mujoco.MjModel, geom_id: int) -> str:
+    mesh_id = int(model.geom_dataid[geom_id])
+    return _name(model, mujoco.mjtObj.mjOBJ_MESH, mesh_id)
+
+
+def _find_mesh_geom(
+    model: mujoco.MjModel,
+    *,
+    body_name: str,
+    mesh_name: str | None = None,
+    mesh_prefix: str | None = None,
+) -> int:
+    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+    matches = []
+    for geom_id in range(model.ngeom):
+        if int(model.geom_bodyid[geom_id]) != body_id:
+            continue
+        if model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_MESH:
+            continue
+        candidate = _mesh_name(model, geom_id)
+        if candidate == mesh_name or (
+            mesh_prefix is not None and candidate.startswith(mesh_prefix)
+        ):
+            matches.append(geom_id)
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"expected one mesh geom on {body_name}, found {matches}: "
+            f"mesh={mesh_name}, prefix={mesh_prefix}"
+        )
+    return matches[0]
+
+
+class ExactMeshCache:
+    def __init__(self) -> None:
+        self._trimesh: dict[str, Any] = {}
+        self._fcl: dict[str, Any] = {}
+
+    def trimesh(self, name: str):
+        if name not in self._trimesh:
+            self._trimesh[name] = trimesh.load_mesh(
+                ASSET_DIR / f"{name}.stl",
+                process=True,
+            )
+        return self._trimesh[name]
+
+    def fcl(self, name: str):
+        if name not in self._fcl:
+            mesh = self.trimesh(name)
+            shape = fcl.BVHModel()
+            shape.beginModel(len(mesh.vertices), len(mesh.faces))
+            shape.addSubModel(
+                np.asarray(mesh.vertices, dtype=float),
+                np.asarray(mesh.faces, dtype=np.int32),
+            )
+            shape.endModel()
+            self._fcl[name] = shape
+        return self._fcl[name]
+
+
+def _set_joint_pose(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    joint_id: int,
+    angle_deg: float,
+) -> None:
+    mujoco.mj_resetData(model, data)
+    data.qpos[:] = model.qpos0
+    data.qpos[model.jnt_qposadr[joint_id]] = math.radians(angle_deg)
+    mujoco.mj_forward(model, data)
+
+
+def _collision_objects(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    cache: ExactMeshCache,
+    servo_geom_id: int,
+    white_geom_id: int,
+):
+    servo_transform = fcl.Transform(
+        np.asarray(data.geom_xmat[servo_geom_id]).reshape(3, 3),
+        np.asarray(data.geom_xpos[servo_geom_id]),
+    )
+    white_transform = fcl.Transform(
+        np.asarray(data.geom_xmat[white_geom_id]).reshape(3, 3),
+        np.asarray(data.geom_xpos[white_geom_id]),
+    )
+    return (
+        fcl.CollisionObject(cache.fcl(SERVO_COLLISION_MESH), servo_transform),
+        fcl.CollisionObject(cache.fcl(_mesh_name(model, white_geom_id)), white_transform),
+    )
+
+
+def _collide(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    cache: ExactMeshCache,
+    servo_geom_id: int,
+    white_geom_id: int,
+    *,
+    contacts: bool = False,
+):
+    servo, white = _collision_objects(
+        model,
+        data,
+        cache,
+        servo_geom_id,
+        white_geom_id,
+    )
+    result = fcl.CollisionResult()
+    count = fcl.collide(
+        servo,
+        white,
+        fcl.CollisionRequest(
+            num_max_contacts=100_000 if contacts else 1,
+            enable_contact=contacts,
+        ),
+        result,
+    )
+    return bool(count), result
+
+
+def _dilated_face_count(mesh, faces: set[int], margin_m: float) -> int:
+    if not faces:
+        return 0
+    centres = np.asarray(mesh.triangles_center)
+    tree = cKDTree(centres)
+    dilated = set(faces)
+    for face_id in faces:
+        dilated.update(tree.query_ball_point(centres[face_id], r=margin_m))
+    return len(dilated)
+
+
+def _neutral_overlap(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    cache: ExactMeshCache,
+    pair: ServoShellPair,
+    servo_geom_id: int,
+    white_geom_id: int,
+    *,
+    neutral_deg: float,
+    margin_m: float,
+) -> dict[str, Any] | None:
+    joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, pair.joint)
+    sample_angles = np.linspace(-neutral_deg, neutral_deg, 5)
+    servo_faces: set[int] = set()
+    white_faces: set[int] = set()
+    collision_samples = 0
+    for angle_deg in sample_angles:
+        _set_joint_pose(model, data, joint_id, float(angle_deg))
+        colliding, result = _collide(
+            model,
+            data,
+            cache,
+            servo_geom_id,
+            white_geom_id,
+            contacts=True,
+        )
+        collision_samples += int(colliding)
+        servo_faces.update(int(contact.b1) for contact in result.contacts)
+        white_faces.update(int(contact.b2) for contact in result.contacts)
+
+    if collision_samples == 0:
+        return None
+    if collision_samples != len(sample_angles):
+        raise RuntimeError(
+            f"ambiguous contact inside the neutral window: {pair.joint}/"
+            f"{pair.white_mesh} ({collision_samples}/{len(sample_angles)} samples)"
+        )
+
+    servo_mesh = cache.trimesh(SERVO_COLLISION_MESH)
+    white_mesh = cache.trimesh(pair.white_mesh)
+    return {
+        "status": "mounting_overlap",
+        "neutral_collision_samples": collision_samples,
+        "neutral_sample_count": len(sample_angles),
+        "servo_contact_faces": len(servo_faces),
+        "servo_excluded_faces_with_margin": _dilated_face_count(
+            servo_mesh,
+            servo_faces,
+            margin_m,
+        ),
+        "white_contact_faces": len(white_faces),
+        "white_excluded_faces_with_margin": _dilated_face_count(
+            white_mesh,
+            white_faces,
+            margin_m,
+        ),
+        "reason": (
+            "persistent assembly intersection; the complete pair is excluded "
+            "because a local runtime pair would start in contact"
+        ),
+    }
+
+
+def _scan_endpoint(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    cache: ExactMeshCache,
+    pair: ServoShellPair,
+    servo_geom_id: int,
+    white_geom_id: int,
+    *,
+    direction: int,
+    step_deg: float,
+) -> float | None:
+    joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, pair.joint)
+    safe = 0.0
+    contact = None
+    candidate = 0.0
+    while abs(candidate) < 180.0:
+        candidate += direction * step_deg
+        _set_joint_pose(model, data, joint_id, candidate)
+        if _collide(model, data, cache, servo_geom_id, white_geom_id)[0]:
+            contact = candidate
+            break
+    if contact is None:
+        return None
+
+    while abs(contact - safe) > 1e-9:
+        candidate = 0.5 * (safe + contact)
+        _set_joint_pose(model, data, joint_id, candidate)
+        if _collide(model, data, cache, servo_geom_id, white_geom_id)[0]:
+            contact = candidate
+        else:
+            safe = candidate
+    return contact
+
+
+def _quat_align_z(direction) -> tuple[float, float, float, float]:
+    z_axis = np.asarray(direction, dtype=float)
+    z_axis /= np.linalg.norm(z_axis)
+    helper = np.array([1.0, 0.0, 0.0]) if abs(z_axis[0]) < 0.8 else np.array([0.0, 1.0, 0.0])
+    x_axis = np.cross(helper, z_axis)
+    x_axis /= np.linalg.norm(x_axis)
+    y_axis = np.cross(z_axis, x_axis)
+    quat = np.zeros(4)
+    mujoco.mju_mat2Quat(quat, np.column_stack((x_axis, y_axis, z_axis)).ravel())
+    return tuple(float(value) for value in quat)
+
+
+def _body_local_point(data: mujoco.MjData, body_id: int, point) -> tuple[float, ...]:
+    rotation = np.asarray(data.xmat[body_id]).reshape(3, 3)
+    local = rotation.T @ (np.asarray(point) - np.asarray(data.xpos[body_id]))
+    return tuple(float(value) for value in local)
+
+
+def _contact_patch(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    cache: ExactMeshCache,
+    pair: ServoShellPair,
+    servo_geom_id: int,
+    white_geom_id: int,
+    *,
+    endpoint_deg: float,
+    direction: int,
+) -> dict[str, Any]:
+    joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, pair.joint)
+    _set_joint_pose(model, data, joint_id, endpoint_deg + direction * 0.0001)
+    _, result = _collide(
+        model,
+        data,
+        cache,
+        servo_geom_id,
+        white_geom_id,
+        contacts=True,
+    )
+    if not result.contacts:
+        raise RuntimeError(f"contact vanished while deriving patch: {pair}")
+    first_normal = np.asarray(result.contacts[0].normal, dtype=float)
+    cluster = [
+        contact
+        for contact in result.contacts
+        if abs(float(np.dot(np.asarray(contact.normal), first_normal))) > 0.99
+    ]
+    point = np.mean([np.asarray(contact.pos) for contact in cluster], axis=0)
+    normal = np.mean([np.asarray(contact.normal) for contact in cluster], axis=0)
+    normal /= np.linalg.norm(normal)
+    servo_body_id = int(model.geom_bodyid[servo_geom_id])
+    white_body_id = int(model.geom_bodyid[white_geom_id])
+    servo_rotation = np.asarray(data.xmat[servo_body_id]).reshape(3, 3)
+    white_rotation = np.asarray(data.xmat[white_body_id]).reshape(3, 3)
+    servo_centre = point - normal * PATCH_HALF_THICKNESS_M
+    white_centre = point + normal * PATCH_HALF_THICKNESS_M
+    return {
+        "servo_body": pair.servo_body,
+        "servo_pos": _body_local_point(data, servo_body_id, servo_centre),
+        "servo_quat": _quat_align_z(servo_rotation.T @ normal),
+        "white_body": pair.white_body,
+        "white_pos": _body_local_point(data, white_body_id, white_centre),
+        "white_quat": _quat_align_z(white_rotation.T @ (-normal)),
+        "contact_cluster_size": len(cluster),
+    }
+
+
+def derive(args: argparse.Namespace) -> dict[str, Any]:
+    model, data = _build_ref_zero_model()
+    cache = ExactMeshCache()
+    results = []
+    for pair in SERVO_SHELL_PAIRS:
+        servo_geom_id = _find_mesh_geom(
+            model,
+            body_name=pair.servo_body,
+            mesh_prefix="sts3215",
+        )
+        white_geom_id = _find_mesh_geom(
+            model,
+            body_name=pair.white_body,
+            mesh_name=pair.white_mesh,
+        )
+        overlap = _neutral_overlap(
+            model,
+            data,
+            cache,
+            pair,
+            servo_geom_id,
+            white_geom_id,
+            neutral_deg=args.neutral_deg,
+            margin_m=args.overlap_margin_mm / 1000.0,
+        )
+        item: dict[str, Any] = {
+            "joint": pair.joint,
+            "servo_number": pair.servo_number,
+            "servo_body": pair.servo_body,
+            "servo_mesh": SERVO_COLLISION_MESH,
+            "white_body": pair.white_body,
+            "white_mesh": pair.white_mesh,
+        }
+        if overlap is not None:
+            item.update(overlap)
+            item["min"] = None
+            item["max"] = None
+            results.append(item)
+            continue
+
+        item["status"] = "clear_at_neutral"
+        for side, direction in (("min", -1), ("max", 1)):
+            endpoint = _scan_endpoint(
+                model,
+                data,
+                cache,
+                pair,
+                servo_geom_id,
+                white_geom_id,
+                direction=direction,
+                step_deg=args.step_deg,
+            )
+            if endpoint is None:
+                item[side] = None
+            else:
+                item[side] = {
+                    "angle_deg": endpoint,
+                    "patch": _contact_patch(
+                        model,
+                        data,
+                        cache,
+                        pair,
+                        servo_geom_id,
+                        white_geom_id,
+                        endpoint_deg=endpoint,
+                        direction=direction,
+                    ),
+                }
+        results.append(item)
+
+    return {
+        "robot": str(ROBOT_PATH),
+        "joint_ref_deg": 0.0,
+        "scan_step_deg": args.step_deg,
+        "neutral_window_deg": [-args.neutral_deg, args.neutral_deg],
+        "overlap_margin_mm": args.overlap_margin_mm,
+        "results": results,
+    }
+
+
+def verify_runtime_constants(report: dict[str, Any]) -> None:
+    if __package__:
+        from .demo_mujoco_so101_hardstop_calibration import (
+            SERVO_CANDIDATE_STATUSES,
+            SERVO_HARDSTOP_PATCHES,
+        )
+    else:
+        from demo_mujoco_so101_hardstop_calibration import (
+            SERVO_CANDIDATE_STATUSES,
+            SERVO_HARDSTOP_PATCHES,
+        )
+
+    derived_angles: dict[tuple[str, str, str, str], float] = {}
+    direction_status: dict[tuple[str, str], str] = {}
+    for result in report["results"]:
+        for side in ("min", "max"):
+            endpoint = result[side]
+            key = (result["joint"], side)
+            if endpoint is not None:
+                derived_angles[
+                    (
+                        result["joint"],
+                        side,
+                        result["servo_body"],
+                        result["white_mesh"],
+                    )
+                ] = float(endpoint["angle_deg"])
+                direction_status[key] = "contact"
+            elif result["status"] == "mounting_overlap":
+                direction_status.setdefault(key, "mounting_overlap")
+            else:
+                direction_status.setdefault(key, "none")
+
+    for patch in SERVO_HARDSTOP_PATCHES:
+        key = (
+            patch.joint,
+            patch.side,
+            patch.parent_body,
+            patch.counterpart,
+        )
+        actual = derived_angles.get(key)
+        if actual is None or not math.isclose(
+            actual,
+            patch.mesh_contact_deg,
+            rel_tol=0.0,
+            abs_tol=1e-6,
+        ):
+            raise RuntimeError(
+                f"runtime servo patch differs from exact derivation: {key}, "
+                f"runtime={patch.mesh_contact_deg}, derived={actual}"
+            )
+
+    for expected in SERVO_CANDIDATE_STATUSES:
+        actual = direction_status[(expected.joint, expected.side)]
+        if actual != expected.status:
+            raise RuntimeError(
+                f"runtime servo status differs for {expected.joint}/{expected.side}: "
+                f"runtime={expected.status}, derived={actual}"
+            )
+
+
+def main() -> None:
+    args = parse_args()
+    report = derive(args)
+    if args.verify_runtime:
+        verify_runtime_constants(report)
+        report["runtime_verification"] = "passed"
+    print(json.dumps(report, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
