@@ -1,20 +1,19 @@
-"""Calibrate SO-101 mechanical hard stops from local shell contacts.
+"""Calibrate SO-101 mechanical hard stops from white-shell contacts.
 
 This is an independent calibration model.  It starts from the standalone
 SO-101 MJCF, temporarily sets all joint refs to zero, disables its authored
 joint/control ranges and all unrelated collision masks, then adds explicit
-local contact pairs for the photographed white-shell stops and the valid
-servo-housing stops found by exact mesh scans.  Wrist roll remains unlimited
-when a complete revolution finds no shell or servo stop.
+local contact pairs only for the photographed white-shell stops.  Servo-housing
+contacts are deliberately excluded.  Wrist roll remains unlimited when a
+complete revolution finds no shell stop.
 
 The small contact patches were placed on the exact visual STL triangles at
 the photographed shell-to-shell contact locations.  The program first scans
 for contact with no joint limits enabled.  It then uses the detected contact
 angles as MuJoCo joint limits so a local patch cannot slip past its mate under
-a large position command.  Servo horns, shafts, cables and persistent mounting
-overlaps are excluded.  The moving joint and contacted servo may have different
-numbers: joint 3's positive stop is its white bracket contacting servo 2's
-housing.  No real-arm readings or follower calibration file are used here.
+a large position command.  Joint 3's positive endpoint uses the stable actual
+angle confirmed manually in the Viewer.  No real-arm readings or follower
+calibration file are used here.
 """
 
 from __future__ import annotations
@@ -28,6 +27,7 @@ from dataclasses import dataclass
 
 import mujoco
 import mujoco.viewer
+from mujoco.glfw import glfw
 
 if __package__:
     from .demo_mujoco_so101_unlimited import (
@@ -72,14 +72,10 @@ class HardstopPatch:
     child_pos: tuple[float, float, float]
     child_quat: tuple[float, float, float, float]
     mesh_contact_deg: float
-    source: str = "shell"
-    counterpart: str = "white shell"
-    servo_number: int | None = None
 
     @property
     def name(self) -> str:
-        source_prefix = "" if self.source == "shell" else f"{self.source}_"
-        return f"hardstop_{source_prefix}{self.joint}_{self.side}"
+        return f"hardstop_{self.joint}_{self.side}"
 
     @property
     def parent_geom(self) -> str:
@@ -91,21 +87,20 @@ class HardstopPatch:
 
 
 @dataclass(frozen=True)
-class ServoCandidateStatus:
-    """Exact-mesh result for one servo housing and joint direction."""
-
-    joint: str
-    side: str
-    status: str
-    detail: str
-
-
-@dataclass(frozen=True)
 class ScannedEndpoint:
     """One MuJoCo local-patch contact measured without joint limits."""
 
     patch: HardstopPatch
     angle: float
+
+
+@dataclass(frozen=True)
+class ManualCaptureResult:
+    """Outcome of a side-effect-free joint-3 manual endpoint reading."""
+
+    accepted: bool
+    message: str
+    actual_deg: float | None = None
 
 
 # Each 12 x 12 mm face is centred 1.5 mm inside its source STL surface.  The
@@ -115,11 +110,21 @@ SCAN_STEP_DEG = 0.25
 SCAN_TOLERANCE_DEG = 1e-6
 SEARCH_BOUND_DEG = 180.0
 STATUS_PERIOD_S = 0.5
+# Accepted Viewer result (mujoco_ref_zero): actual=90.476573 deg,
+# target=90.450000 deg, tracking error=0.026573 deg.  Only the actual joint
+# angle defines the mechanical endpoint; target and error are diagnostics.
+ELBOW_POSITIVE_HARDSTOP_DEG = 90.476573
+ELBOW_COARSE_STEP_DEG = 1.0
+ELBOW_FINE_STEP_DEG = 0.05
+MANUAL_MAX_VELOCITY_DEG_S = 0.1
+MANUAL_MAX_TRACKING_ERROR_DEG = 0.1
+FINE_STEP_TOGGLE_KEY = glfw.KEY_F
+MANUAL_CAPTURE_KEY = glfw.KEY_ENTER
 
 # The positions and orientations below are body-local.  They came from exact
 # triangle/triangle contact queries on the visual STL meshes at the shell
-# contacts shown in the reference photos.  The former elbow/max shell pair is
-# omitted: the real stop there is the joint-3 bracket hitting servo 2.
+# contacts shown in the reference photos.  Joint 3's positive shell patch is
+# omitted because that endpoint is the manually confirmed value above.
 # mesh_contact_deg is retained only as an independent regression check;
 # scan_hardstop_ranges does not return it.
 SHELL_HARDSTOP_PATCHES = (
@@ -224,129 +229,7 @@ SHELL_HARDSTOP_PATCHES = (
     ),
 )
 
-# Valid first contacts from exact scans of the no-horn STS3215 housing against
-# the relevant moving white parts.  Most pairs use the housing belonging to
-# the moving joint; elbow/max is the cross-link exception where joint 3 moves
-# a white bracket into upstream servo 2.
-SERVO_HARDSTOP_PATCHES = (
-    HardstopPatch(
-        "shoulder_pan",
-        "min",
-        "base",
-        (0.025975172595, 0.021199974861, 0.050702746633),
-        (-0.5, 0.5, 0.5, 0.5),
-        "shoulder",
-        (-0.027227173277, -0.003114915009, 0.011697253367),
-        (0.675276945970, -0.209764263501, 0.675276945970, 0.209764263501),
-        -124.5130859531,
-        source="servo",
-        counterpart="rotation_pitch_so101_v1",
-        servo_number=1,
-    ),
-    HardstopPatch(
-        "shoulder_pan",
-        "max",
-        "base",
-        (0.011692895008, -0.021167375158, 0.045559475133),
-        (-0.497448601252, -0.502538445408, -0.496281965445, 0.503690590317),
-        "shoulder",
-        (-0.025838298808, -0.025596475706, 0.016833568937),
-        (0.707698686322, 0.017983023850, 0.706057567902, -0.017941322102),
-        93.6272342676,
-        source="servo",
-        counterpart="rotation_pitch_so101_v1",
-        servo_number=1,
-    ),
-    HardstopPatch(
-        "shoulder_lift",
-        "min",
-        "shoulder",
-        (-0.009137141512, -0.004521108533, -0.028670704229),
-        (0.801303919811, 0.001901148730, 0.598252788581, -0.001419395938),
-        "upper_arm",
-        (-0.033911471611, 0.011343395369, 0.013742456134),
-        (0.704585068675, -0.077397633611, 0.701168346978, 0.077022311757),
-        -119.0475194759,
-        source="servo",
-        counterpart="upper_arm_so101_v1",
-        servo_number=2,
-    ),
-    HardstopPatch(
-        "shoulder_lift",
-        "max",
-        "shoulder",
-        (-0.051359663363, -0.009579379866, -0.027039026577),
-        (0.800685115698, -0.001244705886, -0.599083407279, -0.000931305739),
-        "upper_arm",
-        (-0.031077917159, -0.019668792769, 0.008707747418),
-        (0.705985895939, 0.005402349211, 0.708184553569, -0.005419173791),
-        107.2681023027,
-        source="servo",
-        counterpart="upper_arm_so101_v1",
-        servo_number=2,
-    ),
-    HardstopPatch(
-        "elbow_flex",
-        "max",
-        "shoulder",
-        (-0.051621863546, -0.009716303608, -0.028373037134),
-        (0.766085507550, 0.002616239797, -0.642729595178, 0.002194970051),
-        "lower_arm",
-        (-0.137308524249, 0.021430885078, 0.008541006178),
-        (-0.499790635837, -0.500209276533, -0.496362412020, 0.503611314343),
-        100.4473491554,
-        source="servo",
-        counterpart="motor_holder_so101_wrist_v1",
-        servo_number=2,
-    ),
-)
-
-HARDSTOP_PATCHES = SHELL_HARDSTOP_PATCHES + SERVO_HARDSTOP_PATCHES
-
-# Every servo is represented in the exact-mesh derivation.  These entries make
-# no-contact and mounting-overlap outcomes explicit instead of manufacturing a
-# false runtime stop.  The two mounting pairs remain intersecting after the
-# requested 0.5 mm triangle-neighbour exclusion and are therefore excluded as
-# whole pairs.
-SERVO_CANDIDATE_STATUSES = (
-    ServoCandidateStatus("shoulder_pan", "min", "contact", "rotation_pitch_so101_v1"),
-    ServoCandidateStatus("shoulder_pan", "max", "contact", "rotation_pitch_so101_v1"),
-    ServoCandidateStatus("shoulder_lift", "min", "contact", "upper_arm_so101_v1"),
-    ServoCandidateStatus("shoulder_lift", "max", "contact", "upper_arm_so101_v1"),
-    ServoCandidateStatus("elbow_flex", "min", "none", "no contact within 180 deg"),
-    ServoCandidateStatus(
-        "elbow_flex",
-        "max",
-        "contact",
-        "joint 3 bracket contacts servo 2 housing",
-    ),
-    ServoCandidateStatus(
-        "wrist_flex",
-        "min",
-        "mounting_overlap",
-        "servo housing is embedded in wrist_roll_pitch_so101_v2",
-    ),
-    ServoCandidateStatus(
-        "wrist_flex",
-        "max",
-        "mounting_overlap",
-        "servo housing is embedded in wrist_roll_pitch_so101_v2",
-    ),
-    ServoCandidateStatus("wrist_roll", "min", "none", "no contact in one revolution"),
-    ServoCandidateStatus("wrist_roll", "max", "none", "no contact in one revolution"),
-    ServoCandidateStatus(
-        "gripper",
-        "min",
-        "mounting_overlap",
-        "moving jaw surrounds the servo output-side housing",
-    ),
-    ServoCandidateStatus(
-        "gripper",
-        "max",
-        "mounting_overlap",
-        "moving jaw surrounds the servo output-side housing",
-    ),
-)
+HARDSTOP_PATCHES = SHELL_HARDSTOP_PATCHES
 
 HARDSTOP_JOINTS = (
     "shoulder_pan",
@@ -366,12 +249,12 @@ def _positive_float(value: str) -> float:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Inspect SO-101 shell and servo hard stops without a real arm.",
+        description="Inspect SO-101 white-shell hard stops without a real arm.",
     )
     parser.add_argument(
         "--scan-only",
         action="store_true",
-        help="print shell/servo candidates and final endpoints without Viewer",
+        help="print shell endpoints and the pending manual endpoint without Viewer",
     )
     parser.add_argument(
         "--headless-check",
@@ -382,13 +265,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--joint-step-deg",
         type=_positive_float,
         default=2.0,
-        help="keyboard target step for arm joints in degrees (default: 2)",
+        help="keyboard target step for arm joints other than joint 3 (default: 2)",
     )
     parser.add_argument(
         "--gripper-step-deg",
         type=_positive_float,
         default=1.0,
         help="keyboard target step for the gripper in degrees (default: 1)",
+    )
+    parser.add_argument(
+        "--elbow-coarse-step-deg",
+        type=_positive_float,
+        default=ELBOW_COARSE_STEP_DEG,
+        help="joint-3 coarse keyboard step in degrees (default: 1)",
+    )
+    parser.add_argument(
+        "--elbow-fine-step-deg",
+        type=_positive_float,
+        default=ELBOW_FINE_STEP_DEG,
+        help="joint-3 fine keyboard step in degrees (default: 0.05)",
     )
     return parser.parse_args(argv)
 
@@ -443,18 +338,13 @@ def build_contact_model() -> mujoco.MjModel:
             raise RuntimeError(f"required MuJoCo joint is missing: {joint_name}")
         joint.ref = 0.0
     for patch in HARDSTOP_PATCHES:
-        parent_rgba = (
-            (1.0, 0.45, 0.05, 0.8)
-            if patch.source == "servo"
-            else (1.0, 0.1, 0.1, 0.7)
-        )
         _add_contact_patch(
             spec,
             body_name=patch.parent_body,
             geom_name=patch.parent_geom,
             pos=patch.parent_pos,
             quat=patch.parent_quat,
-            rgba=parent_rgba,
+            rgba=(1.0, 0.1, 0.1, 0.7),
         )
         _add_contact_patch(
             spec,
@@ -576,7 +466,7 @@ def _scan_one_endpoint(
 def scan_hardstop_candidates(
     model: mujoco.MjModel,
 ) -> tuple[ScannedEndpoint, ...]:
-    """Measure every valid shell and servo contact with limits disabled."""
+    """Measure every photographed white-shell contact with limits disabled."""
 
     if any(bool(value) for value in model.jnt_limited):
         raise ValueError("hard-stop scan requires all joint limits to be disabled")
@@ -618,17 +508,22 @@ def select_hardstop_ranges(
     for joint in HARDSTOP_JOINTS:
         minimums = grouped.get((joint, "min"), [])
         maximums = grouped.get((joint, "max"), [])
-        if not minimums or not maximums:
+        if not minimums or (joint != "elbow_flex" and not maximums):
             raise RuntimeError(f"missing a two-sided hard stop for {joint}")
         # Negative direction approaches zero by increasing; positive direction
         # approaches zero by decreasing.
         winners[(joint, "min")] = max(minimums, key=lambda item: item.angle)
-        winners[(joint, "max")] = min(maximums, key=lambda item: item.angle)
+        if joint != "elbow_flex":
+            winners[(joint, "max")] = min(maximums, key=lambda item: item.angle)
 
     ranges = {
         joint: (
             winners[(joint, "min")].angle,
-            winners[(joint, "max")].angle,
+            (
+                math.radians(ELBOW_POSITIVE_HARDSTOP_DEG)
+                if joint == "elbow_flex"
+                else winners[(joint, "max")].angle
+            ),
         )
         for joint in HARDSTOP_JOINTS
     }
@@ -662,58 +557,43 @@ def apply_hardstop_ranges(
         model.jnt_limited[joint_id] = True
 
 
-def _candidate_by_source(
-    candidates: Sequence[ScannedEndpoint],
-) -> dict[tuple[str, str, str], ScannedEndpoint]:
-    return {
-        (candidate.patch.joint, candidate.patch.side, candidate.patch.source): candidate
-        for candidate in candidates
-    }
-
-
 def print_ranges(
     ranges: Mapping[str, tuple[float, float]],
     candidates: Sequence[ScannedEndpoint],
     winners: Mapping[tuple[str, str], ScannedEndpoint],
 ) -> None:
     print("[机械接触] ref=0、无真机读数、无预设关节限位的扫描结果")
-    candidate_lookup = _candidate_by_source(candidates)
-    servo_status = {
-        (status.joint, status.side): status for status in SERVO_CANDIDATE_STATUSES
+    candidate_lookup = {
+        (candidate.patch.joint, candidate.patch.side): candidate
+        for candidate in candidates
     }
     for joint in JOINT_NAMES:
         print(f"  {joint}")
         for side in ("min", "max"):
-            shell = candidate_lookup.get((joint, side, "shell"))
-            servo = candidate_lookup.get((joint, side, "servo"))
-            status = servo_status[(joint, side)]
+            shell = candidate_lookup.get((joint, side))
             shell_text = (
                 f"{math.degrees(shell.angle):+.4f} deg" if shell else "none"
             )
-            if servo:
-                servo_text = (
-                    f"{math.degrees(servo.angle):+.4f} deg"
-                    f"(servo#{servo.patch.servo_number} housing)"
-                )
-            elif status.status == "mounting_overlap":
-                servo_text = "excluded(mounting overlap)"
+            if joint == "elbow_flex" and side == "max":
+                final_text = f"{ELBOW_POSITIVE_HARDSTOP_DEG:+.6f} deg/manual"
             else:
-                servo_text = "none"
-            winner = winners.get((joint, side))
-            if winner is None:
-                final_text = "unlimited"
-            else:
+                winner = winners.get((joint, side))
                 final_text = (
-                    f"{math.degrees(winner.angle):+.4f} deg/"
-                    f"{winner.patch.source}"
+                    f"{math.degrees(winner.angle):+.4f} deg/shell"
+                    if winner is not None
+                    else "unlimited"
                 )
-            print(
-                f"    {side:3s} shell={shell_text:>13s} "
-                f"servo={servo_text:>27s} final={final_text}"
-            )
+            print(f"    {side:3s} shell={shell_text:>13s} final={final_text}")
     print("[最终范围]")
     for joint in HARDSTOP_JOINTS:
         lower, upper = ranges[joint]
+        if joint == "elbow_flex":
+            print(
+                f"  {joint:14s} "
+                f"min={math.degrees(lower):+10.4f} deg  "
+                f"max={math.degrees(upper):+.6f} deg/manual"
+            )
+            continue
         print(
             f"  {joint:14s} "
             f"min={math.degrees(lower):+10.4f} deg  "
@@ -721,19 +601,81 @@ def print_ranges(
             f"span={math.degrees(upper - lower):9.4f} deg"
         )
     print("  wrist_roll     no contact in one revolution; unlimited")
+    print("  舵机外壳碰撞已禁用；3号正向采用已确认的实际关节角。")
 
 
 def _active_hardstops(model: mujoco.MjModel, data: mujoco.MjData) -> str:
     active = [
-        (
-            f"{patch.joint}/{patch.side}/servo#{patch.servo_number}"
-            if patch.source == "servo"
-            else f"{patch.joint}/{patch.side}/shell"
-        )
+        f"{patch.joint}/{patch.side}/shell"
         for patch in HARDSTOP_PATCHES
         if _patch_is_contacting(model, data, patch)
     ]
     return ",".join(active) if active else "none"
+
+
+def selected_step_degrees(
+    servo_id: int,
+    *,
+    fine_mode: bool,
+    joint_step_deg: float,
+    gripper_step_deg: float,
+    elbow_coarse_step_deg: float,
+    elbow_fine_step_deg: float,
+) -> float:
+    """Return the active keyboard step without changing controller state."""
+
+    if servo_id not in range(1, 7):
+        raise ValueError(f"servo ID must be in 1..6, got {servo_id}")
+    if servo_id == 3:
+        return elbow_fine_step_deg if fine_mode else elbow_coarse_step_deg
+    if servo_id == 6:
+        return gripper_step_deg
+    return joint_step_deg
+
+
+def capture_manual_elbow_max(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    selected_servo_id: int,
+) -> ManualCaptureResult:
+    """Read a stable actual q3 and return a copyable line without mutation."""
+
+    if selected_servo_id != 3:
+        return ManualCaptureResult(False, "[手动标定] 请先选择 3 号关节。")
+
+    joint_id = _object_id(model, mujoco.mjtObj.mjOBJ_JOINT, "elbow_flex")
+    actuator_id = _object_id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "elbow_flex")
+    actual_deg = math.degrees(float(data.qpos[model.jnt_qposadr[joint_id]]))
+    target_deg = math.degrees(float(data.ctrl[actuator_id]))
+    velocity_deg_s = math.degrees(float(data.qvel[model.jnt_dofadr[joint_id]]))
+    tracking_error_deg = abs(target_deg - actual_deg)
+    if not all(
+        math.isfinite(value)
+        for value in (actual_deg, target_deg, velocity_deg_s, tracking_error_deg)
+    ):
+        return ManualCaptureResult(False, "[手动标定] 状态包含非有限数，读取已拒绝。")
+    if abs(velocity_deg_s) > MANUAL_MAX_VELOCITY_DEG_S:
+        return ManualCaptureResult(
+            False,
+            "[手动标定] 尚未稳定："
+            f"速度={velocity_deg_s:+.6f} deg/s，需不超过 "
+            f"{MANUAL_MAX_VELOCITY_DEG_S:.1f} deg/s。",
+        )
+    if tracking_error_deg > MANUAL_MAX_TRACKING_ERROR_DEG:
+        return ManualCaptureResult(
+            False,
+            "[手动标定] 尚未稳定："
+            f"目标误差={tracking_error_deg:.6f} deg，需不超过 "
+            f"{MANUAL_MAX_TRACKING_ERROR_DEG:.1f} deg。",
+        )
+
+    line = (
+        'SO101_MANUAL_HARDSTOP={"joint":"elbow_flex","side":"max",'
+        f'"actual_deg":{actual_deg:.6f},"target_deg":{target_deg:.6f},'
+        f'"tracking_error_deg":{tracking_error_deg:.6f},'
+        '"reference":"mujoco_ref_zero"}'
+    )
+    return ManualCaptureResult(True, line, actual_deg)
 
 
 def _status_line(
@@ -742,30 +684,47 @@ def _status_line(
     ranges: Mapping[str, tuple[float, float]],
     winners: Mapping[tuple[str, str], ScannedEndpoint],
     servo_id: int,
+    *,
+    fine_mode: bool = False,
+    last_manual_actual_deg: float | None = None,
 ) -> str:
     actuator_id = servo_id - 1
     joint_name = JOINT_NAMES[actuator_id]
     joint_id = int(model.actuator_trnid[actuator_id, 0])
     actual = float(data.qpos[model.jnt_qposadr[joint_id]])
     target = float(data.ctrl[actuator_id])
+    velocity = float(data.qvel[model.jnt_dofadr[joint_id]])
     force = float(data.actuator_force[actuator_id])
     if joint_name in ranges:
         lower, upper = ranges[joint_name]
-        lower_source = winners[(joint_name, "min")].patch.source
-        upper_source = winners[(joint_name, "max")].patch.source
-        range_text = (
-            f"[{math.degrees(lower):+.2f}/{lower_source},"
-            f"{math.degrees(upper):+.2f}/{upper_source}] deg"
-        )
+        if joint_name == "elbow_flex":
+            range_text = (
+                f"[{math.degrees(lower):+.2f}/shell,"
+                f"{math.degrees(upper):+.6f}/manual] deg"
+            )
+        else:
+            range_text = (
+                f"[{math.degrees(lower):+.2f}/shell,"
+                f"{math.degrees(upper):+.2f}/shell] deg"
+            )
     else:
         range_text = "unlimited"
+    mode = "fine" if fine_mode else "coarse"
+    latest = (
+        f"{last_manual_actual_deg:+.6f} deg"
+        if last_manual_actual_deg is not None
+        else "none"
+    )
+    manual_text = f" 3号步长模式={mode} 3号最近手动值={latest}"
     return (
         f"[状态] {servo_id} {joint_name} "
         f"目标={math.degrees(target):+.2f} deg "
         f"实际={math.degrees(actual):+.2f} deg "
+        f"速度={math.degrees(velocity):+.3f} deg/s "
         f"接触范围={range_text} "
         f"驱动力={force:+.2f} "
         f"硬限位接触={_active_hardstops(model, data)}"
+        f"{manual_text}"
     )
 
 
@@ -792,31 +751,43 @@ def run_headless_check(
                 raise RuntimeError(f"{joint} passed through its maximum hard stop")
             if not all(math.isfinite(float(value)) for value in data.qpos):
                 raise RuntimeError("headless check produced non-finite qpos")
-    print("[检查] 十个接触端点均阻止了对应关节继续转动。")
+            if not all(math.isfinite(float(value)) for value in data.qvel):
+                raise RuntimeError("headless check produced non-finite qvel")
+    print("[检查] 九个白壳端点与 3 号手动正向端点均有效。")
 
 
-def print_controls(joint_step_deg: float, gripper_step_deg: float) -> None:
+def print_controls(
+    joint_step_deg: float,
+    gripper_step_deg: float,
+    elbow_coarse_step_deg: float,
+    elbow_fine_step_deg: float,
+) -> None:
     print(
         """
-SO-101 白色外壳与舵机外壳机械硬限位标定
+SO-101 白色结构件机械硬限位与 3 号正向手动标定
 
   1  shoulder_pan              4  wrist_flex
   2  shoulder_lift             5  wrist_roll（无限位）
   3  elbow_flex                6  gripper
 
   A / D      减小 / 增大所选关节目标
+  F          切换 3 号粗调 / 细调
+  Enter      读取稳定后的 3 号实际角度（只打印，不修改或写文件）
   P          立即打印状态
   Space      暂停 / 继续
   Backspace  复位
   关闭 Viewer 窗口退出
 
-红、蓝小片表示白色件止挡；橙、蓝小片表示舵机外壳止挡。
-关节范围由启动时的无约束接触扫描得到；真机数据未参与。
+红、蓝小片仅表示白色结构件止挡；所有舵机外壳碰撞均已禁用。
+3 号正向已应用手动标定值 +90.476573 deg。
+如需复核：选 3 -> A/D 靠近上限 -> F 切细调 -> 等待稳定 -> Enter。
+Enter 仅在速度和目标误差均不超过 0.1 时重新输出实际读数。
 """.strip()
     )
     print(
-        f"键盘步长：机械臂={joint_step_deg:g} deg，"
-        f"夹爪={gripper_step_deg:g} deg"
+        f"键盘步长：其他机械臂={joint_step_deg:g} deg，"
+        f"夹爪={gripper_step_deg:g} deg，3号粗调={elbow_coarse_step_deg:g} deg，"
+        f"3号细调={elbow_fine_step_deg:g} deg"
     )
 
 
@@ -827,14 +798,24 @@ def run_interactive(
     *,
     joint_step_deg: float,
     gripper_step_deg: float,
+    elbow_coarse_step_deg: float,
+    elbow_fine_step_deg: float,
 ) -> None:
     data = mujoco.MjData(model)
     reset_robot(model, data)
+    mujoco.mj_forward(model, data)
     key_events: queue.SimpleQueue[int] = queue.SimpleQueue()
     selected_servo_id = 1
+    fine_mode = False
+    last_manual_actual_deg = None
     paused = False
     last_status = -math.inf
-    print_controls(joint_step_deg, gripper_step_deg)
+    print_controls(
+        joint_step_deg,
+        gripper_step_deg,
+        elbow_coarse_step_deg,
+        elbow_fine_step_deg,
+    )
     print(f"[基础模型] {ROBOT_PATH}")
 
     with mujoco.viewer.launch_passive(
@@ -868,28 +849,63 @@ def run_interactive(
                         geomgroup_before=geomgroup_before,
                         flags_before=flags_before,
                     )
+                    if keycode == FINE_STEP_TOGGLE_KEY:
+                        viewer.opt.flags[:] = flags_before
                     if keycode in SERVO_SELECTION_KEYS:
                         selected_servo_id = SERVO_SELECTION_KEYS[keycode] + 1
                         print_status_now = True
                     elif keycode in ADJUSTMENT_KEYS:
+                        step_deg = selected_step_degrees(
+                            selected_servo_id,
+                            fine_mode=fine_mode,
+                            joint_step_deg=joint_step_deg,
+                            gripper_step_deg=gripper_step_deg,
+                            elbow_coarse_step_deg=elbow_coarse_step_deg,
+                            elbow_fine_step_deg=elbow_fine_step_deg,
+                        )
                         target = adjust_control(
                             model,
                             data,
                             selected_servo_id,
                             ADJUSTMENT_KEYS[keycode],
-                            joint_step_rad=math.radians(joint_step_deg),
-                            gripper_step_rad=math.radians(gripper_step_deg),
+                            joint_step_rad=math.radians(step_deg),
+                            gripper_step_rad=math.radians(step_deg),
                         )
                         print(
                             f"[控制] {JOINT_NAMES[selected_servo_id - 1]} "
-                            f"目标={math.degrees(target):+.2f} deg"
+                            f"目标={math.degrees(target):+.6f} deg "
+                            f"步长={step_deg:g} deg"
                         )
+                        print_status_now = True
+                    elif keycode == FINE_STEP_TOGGLE_KEY:
+                        if selected_servo_id == 3:
+                            fine_mode = not fine_mode
+                            mode = "细调" if fine_mode else "粗调"
+                            step_deg = (
+                                elbow_fine_step_deg
+                                if fine_mode
+                                else elbow_coarse_step_deg
+                            )
+                            print(f"[3号步长] 已切换为{mode}：{step_deg:g} deg")
+                        else:
+                            print("[3号步长] F 仅在选中 3 号关节时生效。")
+                        print_status_now = True
+                    elif keycode == MANUAL_CAPTURE_KEY:
+                        result = capture_manual_elbow_max(
+                            model,
+                            data,
+                            selected_servo_id,
+                        )
+                        print(result.message)
+                        if result.accepted:
+                            last_manual_actual_deg = result.actual_deg
                         print_status_now = True
                     elif keycode == PAUSE_KEY:
                         paused = not paused
                         print("[仿真] 已暂停" if paused else "[仿真] 已继续")
                     elif keycode == RESET_KEY:
                         reset_robot(model, data)
+                        mujoco.mj_forward(model, data)
                         print("[复位] 已恢复参考姿态")
                         print_status_now = True
                     elif keycode == STATUS_KEY:
@@ -905,6 +921,8 @@ def run_interactive(
                         ranges,
                         winners,
                         selected_servo_id,
+                        fine_mode=fine_mode,
+                        last_manual_actual_deg=last_manual_actual_deg,
                     )
                     last_status = loop_start
                 else:
@@ -936,6 +954,8 @@ def main() -> None:
         winners,
         joint_step_deg=args.joint_step_deg,
         gripper_step_deg=args.gripper_step_deg,
+        elbow_coarse_step_deg=args.elbow_coarse_step_deg,
+        elbow_fine_step_deg=args.elbow_fine_step_deg,
     )
 
 
