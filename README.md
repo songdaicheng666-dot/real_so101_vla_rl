@@ -1168,7 +1168,8 @@ run manifest、metrics、loss 曲线、日志、`evaluation_report.json` 和
 在该场景上，项目已进一步实现 `SO101BasicT0Env`。当前 MLP baseline
 读取 92 维低维特权状态，包括机械臂关节、TCP、四个方块位姿/速度、目标颜色、
 T0 相对几何和接触状态；这不等同于只输入 proprioception。策略输出与
-OpenVLA-OFT 数据契约一致的 `[8, 6]` 连续绝对关节目标。奖励保留靠近、双侧夹持、
+OpenVLA-OFT 数据契约同维度的 `[8, 6]` 连续动作，但当前 MLP 使用归一化
+`[-1,1]` 动作入口。奖励保留靠近、双侧夹持、
 抬升、搬运、完整入区、释放、稳定成功和失败原因的独立分项。
 
 训练代码不把“轨迹采集”用来代指整个 RL 流程：环境交互只负责生成数据，
@@ -1190,6 +1191,40 @@ conda run --no-capture-output -n lerobot \
 
 `--smoke` 只用两次短更新验证工程链路，不代表策略已学会抓取或放置。
 完整配置、恢复和评估命令见 [`configs/rl/README.md`](configs/rl/README.md)。
+
+#### 真机与仿真舵机角度对齐
+
+真机 SFT 数据中的六维状态和绝对动作依次为 `shoulder_pan`、
+`shoulder_lift`、`elbow_flex`、`wrist_flex`、`wrist_roll`、`gripper`。
+前五项是 LeRobot 度数，夹爪是 `0～100%`。标定时，先使用 follower
+标定文件确定真机每轴两端读数，再在独立 MuJoCo 标定 demo 中确定对应的
+机械限位姿态；3 号轴正向使用 Viewer 稳定后确认的 `+90.476573°`
+独立标定读数，对应正式 XML 的 `qpos=+91.663386°`。随后用真机带动
+仿真的镜像 demo 逐轴检查旋转方向和中间姿态，
+目前目视已无法区分明显偏移。
+
+正式参数存放在 [`alignment.yaml`](src/real_so101_vla_rl/assets/mujoco/competition_2026/alignment.yaml)：
+`physical_ranges_deg_or_percent` 是真机端点，`mujoco_ranges_deg` 是相应的
+MuJoCo `qpos` 端点。1～4 号轴及夹爪逐轴使用
+
+```text
+t = (真机读数 - 真机下限) / (真机上限 - 真机下限)
+qpos角度 = 仿真下限 + t × (仿真上限 - 仿真下限)
+```
+
+第 5 号 `wrist_roll` 未找到机械止挡，保持数值直接对应。
+正式方向全部为正向。转换模块直接使用 `qpos` 端点；XML 内已有的关节
+`ref` 继续决定连杆的参考姿态，SFT 动作和转换函数不传入 `ref`。
+六轴仿真关节与执行器限位、两个场景的 `home` 均已同步到新坐标。
+
+[`JointAngleMapping`](src/real_so101_vla_rl/joint_angle_mapping.py) 提供
+`real_to_mujoco_qpos()` 和 `mujoco_qpos_to_real_state()`，支持单帧 `[6]`
+及连续动作 `[N,6]`。正式 T0 环境的 `step_real_action_chunk()` 接收
+已反归一化的 LeRobot `[8,6]` 绝对动作：调用转换函数后推进仿真；
+`real_joint_state()` 返回同单位的六维关节状态。现有 PPO/GRPO 的
+`step()` 仍接收归一化动作。转换函数对越界 SFT 输出线性外推，环境在
+`info` 中记录原始动作、请求控制值和执行器控制限位后的有效目标，
+以及已执行步的 `action_mask`；实际关节位置可通过 `real_joint_state()` 查看。
 
 ### 4.8 实机同步录制软件层
 

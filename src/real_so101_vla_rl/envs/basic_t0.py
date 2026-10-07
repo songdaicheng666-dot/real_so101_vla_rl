@@ -26,6 +26,7 @@ from real_so101_vla_rl.envs.components import (
     ActionChunkController,
     PrivilegedStateBuilder,
 )
+from real_so101_vla_rl.joint_angle_mapping import JointAngleMapping
 from real_so101_vla_rl.rewards import REWARD_COMPONENTS, T0Reward, T0RewardConfig
 
 ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets" / "mujoco" / "competition_2026"
@@ -101,6 +102,8 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
         self._validate_model()
         self.alignment = load_alignment()
         validate_mujoco_joint_refs(self.model, alignment=self.alignment)
+        self.joint_mapping = JointAngleMapping(self.alignment)
+        self.joint_mapping.validate_mujoco_ranges(self.model)
         self.alignment_id = str(self.alignment["alignment_id"])
         self._home_key_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_KEY, "home"
@@ -305,10 +308,54 @@ class SO101BasicT0Env(gym.Env[np.ndarray, np.ndarray]):
         self,
         action: np.ndarray,
     ) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
-        if self.current_snapshot is None:
-            raise RuntimeError("reset() must be called before step()")
         normalized_chunk = self.controller.validate_chunk(action)
         control_chunk = self.controller.denormalize(normalized_chunk)
+        return self._step_control_chunk(control_chunk)
+
+    def step_real_action_chunk(
+        self,
+        action: np.ndarray,
+    ) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
+        """Execute LeRobot absolute degrees/percent through the joint mapping."""
+
+        real_chunk = np.asarray(action, dtype=np.float64)
+        expected = (self.action_chunk_size, self.action_size)
+        if real_chunk.shape != expected or not np.all(np.isfinite(real_chunk)):
+            raise ValueError(f"real action must be finite with shape {expected}")
+        requested = self.joint_mapping.real_to_mujoco_qpos(real_chunk)
+        effective = np.clip(
+            requested,
+            self.model.actuator_ctrlrange[:, 0],
+            self.model.actuator_ctrlrange[:, 1],
+        )
+        result = self._step_control_chunk(requested)
+        info = result[4]
+        info.update(
+            {
+                "requested_real_action_deg_or_percent": real_chunk.copy(),
+                "requested_sim_ctrl_rad": requested.copy(),
+                "effective_sim_ctrl_rad": effective,
+                "control_limited": ~np.isclose(
+                    requested, effective, rtol=0, atol=1e-12
+                ),
+            }
+        )
+        return result
+
+    def real_joint_state(self) -> np.ndarray:
+        """Read the six simulated joints in LeRobot degrees/percent."""
+
+        if self.current_snapshot is None:
+            raise RuntimeError("reset() must be called before reading robot state")
+        qpos = self.data.qpos[self.state_builder.robot_qpos_addresses]
+        return self.joint_mapping.mujoco_qpos_to_real_state(qpos)
+
+    def _step_control_chunk(
+        self,
+        control_chunk: np.ndarray,
+    ) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
+        if self.current_snapshot is None:
+            raise RuntimeError("reset() must be called before step()")
         action_mask = np.zeros(self.action_chunk_size, dtype=np.float32)
         reward_components = {name: 0.0 for name in REWARD_COMPONENTS}
         events: list[str] = []

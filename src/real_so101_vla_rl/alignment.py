@@ -42,7 +42,7 @@ def load_alignment(path: str | Path = ALIGNMENT_PATH) -> dict[str, Any]:
     alignment_path = Path(path).resolve()
     with alignment_path.open(encoding="utf-8") as stream:
         config = yaml.safe_load(stream)
-    if config.get("schema_version") != 2:
+    if config.get("schema_version") != 3:
         raise ValueError("unsupported alignment schema")
     if not str(config.get("alignment_id", "")).strip():
         raise ValueError("alignment_id must be non-empty")
@@ -71,20 +71,14 @@ def real_state_to_mujoco_qpos(
     *,
     alignment: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Convert LeRobot degrees/percent numerically to MuJoCo radians.
+    """Convert one LeRobot state to MuJoCo qpos using endpoint alignment."""
 
-    The first five joint references are encoded in the MJCF ``ref`` values,
-    not subtracted here. Gripper percent is treated as the same number of
-    degrees. This conversion does not clip model outputs.
-    """
+    from real_so101_vla_rl.joint_angle_mapping import JointAngleMapping
 
-    config = alignment or load_alignment()
-    if config.get("schema_version") != 2:
-        raise ValueError("unsupported alignment schema")
     values = np.asarray(state, dtype=np.float64)
-    if values.shape != (6,) or not np.all(np.isfinite(values)):
-        raise ValueError("real SO-101 state must contain six finite values")
-    return np.deg2rad(values)
+    if values.shape != (6,):
+        raise ValueError("real SO-101 state must contain six values")
+    return JointAngleMapping(alignment).real_to_mujoco_qpos(values)
 
 
 def mujoco_qpos_to_real_state(
@@ -94,13 +88,12 @@ def mujoco_qpos_to_real_state(
 ) -> np.ndarray:
     """Invert :func:`real_state_to_mujoco_qpos`."""
 
-    config = alignment or load_alignment()
-    if config.get("schema_version") != 2:
-        raise ValueError("unsupported alignment schema")
+    from real_so101_vla_rl.joint_angle_mapping import JointAngleMapping
+
     values = np.asarray(qpos, dtype=np.float64)
-    if values.shape != (6,) or not np.all(np.isfinite(values)):
-        raise ValueError("MuJoCo qpos must contain six finite values")
-    return np.rad2deg(values)
+    if values.shape != (6,):
+        raise ValueError("MuJoCo qpos must contain six values")
+    return JointAngleMapping(alignment).mujoco_qpos_to_real_state(values)
 
 
 def home_qpos(*, alignment: dict[str, Any] | None = None) -> np.ndarray:

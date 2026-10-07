@@ -3,8 +3,8 @@
 Joints 1--4 and the gripper linearly map their complete follower calibration
 ranges onto the independently measured MuJoCo hard-stop ranges.  Wrist roll
 keeps direct angle mirroring because no MuJoCo mechanical stop was found.
-Only the real arm's torque setting changes, after confirmation; model range
-changes are in-memory and are never written back to the shared MJCF.
+Only the real arm's torque setting changes, after confirmation. The formal
+MJCF already contains the calibrated joint and actuator ranges.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from typing import Any
 
 import mujoco
 import mujoco.viewer
+import numpy as np
 import yaml
 from mujoco.glfw import glfw
 
@@ -29,6 +30,7 @@ from real_so101_vla_rl.alignment import (
     load_alignment,
     validate_mujoco_joint_refs,
 )
+from real_so101_vla_rl.joint_angle_mapping import JointAngleMapping
 
 if __package__:
     from .demo_mujoco_so101_unlimited import (
@@ -60,18 +62,6 @@ ENCODER_MAX = 4095
 HOMING_POSITION = ENCODER_MAX // 2
 STATUS_PERIOD_S = 1.0
 
-# Independent MuJoCo hard-stop calibration in the authored CAD/reference-zero
-# frame. Wrist roll is intentionally absent because a full revolution found no
-# mechanical contact. These are demo-local until visual live-mirror validation
-# decides whether the mapping belongs in the formal alignment contract.
-MUJOCO_HARDSTOP_RANGES_REF_ZERO_DEG = {
-    "shoulder_pan": (-114.941751, 123.181253),
-    "shoulder_lift": (-105.228269, 101.575927),
-    "elbow_flex": (-101.618334, 90.476573),
-    "wrist_flex": (-103.088965, 101.569427),
-    "gripper": (-11.409628, 114.257495),
-}
-
 
 @dataclass(frozen=True)
 class MappedJointState:
@@ -79,9 +69,8 @@ class MappedJointState:
 
     real_value: float
     normalized: float
-    sim_ref_zero_deg: float
     mujoco_deg: float
-    clipped: bool
+    outside_calibration: bool
 
 
 def load_homing_zero_deg(path: Path = CALIBRATION_PATH) -> tuple[float, ...]:
@@ -129,50 +118,26 @@ def load_calibrated_ranges_deg(
 def mapped_mujoco_ranges_deg(
     joint_refs_deg: Sequence[float],
 ) -> tuple[tuple[float, float] | None, ...]:
-    """Return demo-local qpos ranges, or ``None`` for direct wrist roll."""
+    """Return the formal qpos endpoints, or ``None`` for direct wrist roll."""
 
     if len(joint_refs_deg) != 5 or not all(
         math.isfinite(float(value)) for value in joint_refs_deg
     ):
         raise ValueError("expected five finite MuJoCo joint references")
-    ranges: list[tuple[float, float] | None] = []
-    for index, name in enumerate(JOINT_NAMES):
-        ref_zero_range = MUJOCO_HARDSTOP_RANGES_REF_ZERO_DEG.get(name)
-        if ref_zero_range is None:
-            ranges.append(None)
-            continue
-        reference = float(joint_refs_deg[index]) if index < 5 else 0.0
-        ranges.append(
-            (
-                float(ref_zero_range[0]) + reference,
-                float(ref_zero_range[1]) + reference,
-            )
-        )
-    return tuple(ranges)
-
-
-def apply_demo_mujoco_ranges(
-    model: mujoco.MjModel,
-    joint_refs_deg: Sequence[float],
-) -> tuple[tuple[float, float] | None, ...]:
-    """Apply hard-stop ranges to this in-memory model and return them."""
-
-    ranges = mapped_mujoco_ranges_deg(joint_refs_deg)
-    for index, joint_range in enumerate(ranges):
-        if joint_range is None:
-            continue
-        range_rad = tuple(math.radians(value) for value in joint_range)
-        model.jnt_range[index] = range_rad
-        model.jnt_limited[index] = True
-        model.actuator_ctrlrange[index] = range_rad
-        model.actuator_ctrllimited[index] = True
-    return ranges
+    expected_refs = load_alignment()["robot"]["joint_ref_deg"]
+    if not np.allclose(joint_refs_deg, expected_refs, rtol=0, atol=1e-8):
+        raise ValueError("joint references differ from the formal alignment")
+    ranges = JointAngleMapping().mujoco_ranges_deg()
+    return tuple(
+        None if index == 4 else tuple(float(value) for value in ranges[index])
+        for index in range(6)
+    )
 
 
 def load_calibrated_robot(
     real_ranges: Sequence[tuple[float, float]] | None = None,
 ) -> tuple[mujoco.MjModel, mujoco.MjData]:
-    """Load the project robot and apply demo-local mapped limits in memory."""
+    """Load the project robot and check its formal mapped limits."""
 
     if not ROBOT_PATH.is_file():
         raise FileNotFoundError(f"SO-101 robot model not found: {ROBOT_PATH}")
@@ -193,33 +158,7 @@ def load_calibrated_robot(
     ):
         raise RuntimeError("alignment physical ranges differ from follower calibration")
 
-    alignment_ranges = alignment_robot["mujoco_ranges_deg"]
-    if len(alignment_ranges) != len(JOINT_NAMES):
-        raise ValueError("alignment must contain six MuJoCo joint ranges")
-    for index, (name, expected_deg) in enumerate(
-        zip(JOINT_NAMES, alignment_ranges, strict=True)
-    ):
-        if not bool(model.jnt_limited[index]):
-            raise RuntimeError(f"MuJoCo joint limit is disabled: {name}")
-        if not bool(model.actuator_ctrllimited[index]):
-            raise RuntimeError(f"MuJoCo actuator control limit is disabled: {name}")
-        expected_rad = tuple(math.radians(float(value)) for value in expected_deg)
-        if not all(
-            math.isclose(float(actual), expected, rel_tol=0.0, abs_tol=1e-7)
-            for actual, expected in zip(
-                model.jnt_range[index], expected_rad, strict=True
-            )
-        ):
-            raise RuntimeError(f"MuJoCo joint range differs from alignment: {name}")
-        if not all(
-            math.isclose(float(actual), expected, rel_tol=0.0, abs_tol=1e-7)
-            for actual, expected in zip(
-                model.actuator_ctrlrange[index], expected_rad, strict=True
-            )
-        ):
-            raise RuntimeError(f"MuJoCo control range differs from alignment: {name}")
-
-    apply_demo_mujoco_ranges(model, alignment_robot["joint_ref_deg"])
+    JointAngleMapping().validate_mujoco_ranges(model)
     data = mujoco.MjData(model)
     reset_robot(model, data)
     return model, data
@@ -231,7 +170,7 @@ def map_real_state(
     joint_refs_deg: Sequence[float],
     signs: Sequence[int],
 ) -> tuple[MappedJointState, ...]:
-    """Map follower readings to formal MuJoCo qpos degrees."""
+    """Map follower readings through the formal converter for display."""
 
     if (
         len(real_ranges) != len(JOINT_NAMES)
@@ -249,46 +188,35 @@ def map_real_state(
     refs = tuple(float(value) for value in joint_refs_deg)
     if not all(math.isfinite(value) for value in (*values, *refs)):
         raise ValueError("joint readings and references must be finite")
-
-    validated_ranges = []
-    for name, joint_range in zip(JOINT_NAMES, real_ranges, strict=True):
-        if len(joint_range) != 2:
-            raise ValueError(f"real range for {name} must have two endpoints")
-        lower, upper = (float(value) for value in joint_range)
-        if not all(math.isfinite(value) for value in (lower, upper)) or lower >= upper:
-            raise ValueError(f"invalid real range for {name}: {joint_range}")
-        validated_ranges.append((lower, upper))
-
-    mapped = []
-    for index, (name, value, (real_min, real_max)) in enumerate(
-        zip(JOINT_NAMES, values, validated_ranges, strict=True)
+    mapper = JointAngleMapping()
+    if not np.allclose(real_ranges, mapper.real_ranges, rtol=0, atol=1e-8):
+        raise ValueError("real ranges differ from the formal alignment")
+    if not np.allclose(
+        refs, load_alignment()["robot"]["joint_ref_deg"], rtol=0, atol=1e-8
     ):
-        clipped_value = min(max(value, real_min), real_max)
-        normalized = (clipped_value - real_min) / (real_max - real_min)
-        clipped = value < real_min or value > real_max
-        hardstop_range = MUJOCO_HARDSTOP_RANGES_REF_ZERO_DEG.get(name)
-        if hardstop_range is None:
-            reference = refs[index]
-            mujoco_deg = reference + signs[index] * (clipped_value - reference)
-            sim_ref_zero_deg = mujoco_deg - reference
-        else:
-            effective = normalized
-            if index < 5 and signs[index] < 0:
-                effective = 1.0 - effective
-            sim_min, sim_max = hardstop_range
-            sim_ref_zero_deg = sim_min + effective * (sim_max - sim_min)
-            reference = refs[index] if index < 5 else 0.0
-            mujoco_deg = sim_ref_zero_deg + reference
-        mapped.append(
-            MappedJointState(
-                real_value=value,
-                normalized=normalized,
-                sim_ref_zero_deg=sim_ref_zero_deg,
-                mujoco_deg=mujoco_deg,
-                clipped=clipped,
-            )
+        raise ValueError("joint references differ from the formal alignment")
+    displayed_values = np.asarray(values, dtype=np.float64).copy()
+    for index, sign in enumerate(signs):
+        if sign < 0:
+            if index == 4:
+                displayed_values[index] = 2 * refs[index] - values[index]
+            else:
+                lower, upper = mapper.real_ranges[index]
+                displayed_values[index] = lower + upper - values[index]
+    mapped_deg = np.rad2deg(mapper.real_to_mujoco_qpos(displayed_values))
+    return tuple(
+        MappedJointState(
+            real_value=value,
+            normalized=(value - mapper.real_ranges[index, 0])
+            / (mapper.real_ranges[index, 1] - mapper.real_ranges[index, 0]),
+            mujoco_deg=float(mapped_deg[index]),
+            outside_calibration=bool(
+                value < mapper.real_ranges[index, 0]
+                or value > mapper.real_ranges[index, 1]
+            ),
         )
-    return tuple(mapped)
+        for index, value in enumerate(values)
+    )
 
 
 def map_real_state_deg(
@@ -374,26 +302,20 @@ def print_mapping_ranges(
     """Print the complete endpoint mapping used by this demo."""
 
     formal_ranges = mapped_mujoco_ranges_deg(joint_refs_deg)
-    print("[范围映射] 整段端点线性；joint_ref 仅用于 ref-zero → qpos")
+    print("[范围映射] 真机端点直接线性映射到正式 MuJoCo qpos 端点")
     for index, (name, real_range, formal_range) in enumerate(
         zip(JOINT_NAMES, real_ranges, formal_ranges, strict=True)
     ):
         real_unit = "%" if name == "gripper" else "deg"
-        hardstop_range = MUJOCO_HARDSTOP_RANGES_REF_ZERO_DEG.get(name)
-        if hardstop_range is None:
+        if formal_range is None:
             model_range = tuple(math.degrees(value) for value in model.jnt_range[index])
-            sim_text = "direct/unlimited"
-            formal_text = f"[{model_range[0]:+.6f},{model_range[1]:+.6f}] deg"
+            qpos_text = f"direct [{model_range[0]:+.6f},{model_range[1]:+.6f}] deg"
         else:
-            sim_text = (
-                f"[{hardstop_range[0]:+.6f},{hardstop_range[1]:+.6f}] deg"
-            )
-            assert formal_range is not None
-            formal_text = f"[{formal_range[0]:+.6f},{formal_range[1]:+.6f}] deg"
+            qpos_text = f"[{formal_range[0]:+.6f},{formal_range[1]:+.6f}] deg"
         print(
             f"  {index + 1} {name:14s} "
             f"real=[{real_range[0]:+.6f},{real_range[1]:+.6f}] {real_unit} "
-            f"sim_ref0={sim_text} qpos={formal_text}"
+            f"qpos={qpos_text}"
         )
 
 
@@ -409,14 +331,13 @@ def _print_state(
     print(f"[方向] {direction}")
     for name, item, applied in zip(JOINT_NAMES, mapped, applied_deg, strict=True):
         unit = "%" if name == "gripper" else "°"
-        clipping = " INPUT_CLIPPED" if item.clipped else ""
+        clipping = " INPUT_OUTSIDE_CALIBRATION" if item.outside_calibration else ""
         if not math.isclose(applied, item.mujoco_deg, rel_tol=0.0, abs_tol=1e-9):
             clipping += " MODEL_CLIPPED"
         print(
             f"[镜像] {name:14s} "
             f"真机={item.real_value:+9.4f}{unit} "
             f"t={item.normalized:.6f} "
-            f"ref0={item.sim_ref_zero_deg:+10.6f}° "
             f"请求={item.mujoco_deg:+10.6f}° "
             f"应用={applied:+10.6f}°{clipping}"
         )

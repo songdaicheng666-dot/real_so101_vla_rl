@@ -1,5 +1,5 @@
-schema_version: 2
-alignment_id: so101_comp2026_overview_pnp8_jointref_v2
+schema_version: 3
+alignment_id: so101_comp2026_endpoint_jointmap_v3
 created_from: current_follower_homing_and_overview_2026-10-04
 
 input_provenance:
@@ -28,6 +28,7 @@ robot:
   current_real_home_deg_or_percent: [-7.2527472527, -104.0, 96.3076923077, 73.7142857143, -0.2197802198, 0.2032520325]
   # LeRobot readings at calibrated encoder position 2047; MJCF ref matches these.
   joint_ref_deg: [-0.219780219780, 1.758241758242, 1.186813186813, 1.186813186813, -0.043956043956]
+  joint_direction_signs: [1, 1, 1, 1, 1]
   physical_ranges_deg_or_percent:
     - [-120.1318681319, 120.1318681319]
     - [-105.1428571429, 105.1428571429]
@@ -35,14 +36,16 @@ robot:
     - [-103.7802197802, 103.7802197802]
     - [-180.0, 180.0]
     - [0.0, 100.0]
-  # Existing MJCF joint and actuator limits; this update does not change them.
+  # Verified MuJoCo qpos endpoints; joint 3 positive derives from the accepted
+  # +90.476573-degree stable Viewer reading in the independent CAD scan frame.
+  # The converter interpolates directly between these and physical_ranges.
   mujoco_ranges_deg:
-    - [-120.1318681319, 120.1318681319]
-    - [-105.1428571429, 105.1428571429]
-    - [-97.4505494505, 97.4505494505]
-    - [-103.7802197802, 103.7802197802]
+    - [-115.161531219780, 122.961472780220]
+    - [-103.470027241758, 103.334168758242]
+    - [-100.431520813187, 91.663386186813]
+    - [-101.902151813187, 102.756240186813]
     - [-180.0, 180.0]
-    - [-10.0, 100.0]
+    - [-11.409628, 114.257495]
 
 overview_camera:
   resolution: [640, 480]
