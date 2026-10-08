@@ -1216,6 +1216,9 @@ qpos角度 = 仿真下限 + t × (仿真上限 - 仿真下限)
 正式方向全部为正向。转换模块直接使用 `qpos` 端点；XML 内已有的关节
 `ref` 继续决定连杆的参考姿态，SFT 动作和转换函数不传入 `ref`。
 六轴仿真关节与执行器限位、两个场景的 `home` 均已同步到新坐标。
+共用模型的底座根节点已上移 `2.4 mm`，底座网格最低点与底板顶面齐平；
+可用 `python scripts/demo_so101_live_mirror.py --scene basic_t0` 在正式 T0 场景
+逐轴目视检查真机与仿真姿态。
 
 [`JointAngleMapping`](src/real_so101_vla_rl/joint_angle_mapping.py) 提供
 `real_to_mujoco_qpos()` 和 `mujoco_qpos_to_real_state()`，支持单帧 `[6]`

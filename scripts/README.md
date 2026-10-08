@@ -191,6 +191,22 @@ historical control-chain evidence, not validation of the current cube mass and
 contact model. Re-run the same manual check for the cubes; this demo remains a
 regression tool separate from the Gymnasium environment and task rewards.
 
+For live pose comparison in the formal T0 scene, support the real follower arm
+and run:
+
+```bash
+conda run --no-capture-output -n lerobot \
+  python scripts/demo_so101_live_mirror.py --scene basic_t0
+```
+
+After calibration is checked, press Enter to disable follower torque and move
+one joint at a time by hand. The mirror prints each real reading, requested and
+applied MuJoCo angle, and any out-of-range or model-clipping flag. Use the
+Viewer's left Camera panel to switch between Free and overview views. The
+formal scene's cubes stay at home while the six robot joints mirror the real
+arm. Closing the Viewer disconnects the bus without re-enabling torque. The
+default command without `--scene` still opens the standalone robot mirror.
+
 For a display-free dependency and dynamics check, run:
 
 ```bash

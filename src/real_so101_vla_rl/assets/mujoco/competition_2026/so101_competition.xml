@@ -99,8 +99,8 @@
   </asset>
 
   <worldbody>
-    <!-- Link base -->
-    <body name="base" pos="0 0.035365 0" quat="0.70710678 0 0 0.70710678" childclass="so101">
+    <!-- Raise the inherited base mesh bottom by 2.4 mm to meet the board at z=0. -->
+    <body name="base" pos="0 0.035365 0.0024" quat="0.70710678 0 0 0.70710678" childclass="so101">
       <inertial pos="0.0137179 -5.19711e-05 0.0334843" mass="0.147"
         fullinertia="0.000114686 0.000136117 0.000130364 -4.59787e-07 4.97151e-06 9.75275e-08"/>
       <!-- Part base_motor_holder_so101_v1 -->

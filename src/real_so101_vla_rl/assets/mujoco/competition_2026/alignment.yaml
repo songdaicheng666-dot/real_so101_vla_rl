@@ -1,5 +1,5 @@
 schema_version: 3
-alignment_id: so101_comp2026_endpoint_jointmap_v3
+alignment_id: so101_comp2026_endpoint_jointmap_baseheight_v4
 created_from: current_follower_homing_and_overview_2026-10-04
 
 input_provenance:
@@ -17,7 +17,7 @@ input_provenance:
     sha256: bb0b6c79099d5fec2fe50b01d15ec4d9784698e16922bdb1a1ab27e95d654e78
 
 base:
-  position_m: [0.0, 0.035365, 0.0]
+  position_m: [0.0, 0.035365, 0.0024]
   yaw_deg: 90.0
   forward_foot_tangent_y_m: 0.100000
   symmetry_axis_x_m: 0.0

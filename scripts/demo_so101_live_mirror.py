@@ -1,4 +1,4 @@
-"""Mirror a hand-moved SO-101 using endpoint-calibrated MuJoCo angles.
+"""Mirror a hand-moved SO-101 in the standalone robot or formal T0 scene.
 
 Joints 1--4 and the gripper linearly map their complete follower calibration
 ranges onto the independently measured MuJoCo hard-stop ranges.  Wrist roll
@@ -27,7 +27,9 @@ import yaml
 from mujoco.glfw import glfw
 
 from real_so101_vla_rl.alignment import (
+    home_qpos,
     load_alignment,
+    reset_to_home_keyframe,
     validate_mujoco_joint_refs,
 )
 from real_so101_vla_rl.joint_angle_mapping import JointAngleMapping
@@ -41,6 +43,7 @@ if __package__:
         restore_viewer_shortcut_side_effect,
         validate_robot,
     )
+    from .demo_mujoco_t0_grasp import load_t0_scene
 else:
     from demo_mujoco_so101_unlimited import (
         JOINT_NAMES,
@@ -50,6 +53,7 @@ else:
         restore_viewer_shortcut_side_effect,
         validate_robot,
     )
+    from demo_mujoco_t0_grasp import load_t0_scene
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +65,7 @@ ROBOT_ID = "my_follower_arm"
 ENCODER_MAX = 4095
 HOMING_POSITION = ENCODER_MAX // 2
 STATUS_PERIOD_S = 1.0
+SCENE_CHOICES = ("robot", "basic_t0")
 
 
 @dataclass(frozen=True)
@@ -136,13 +141,41 @@ def mapped_mujoco_ranges_deg(
 
 def load_calibrated_robot(
     real_ranges: Sequence[tuple[float, float]] | None = None,
+    *,
+    scene: str = "robot",
 ) -> tuple[mujoco.MjModel, mujoco.MjData]:
-    """Load the project robot and check its formal mapped limits."""
+    """Load a mirror model and check its formal mapped limits and home."""
 
-    if not ROBOT_PATH.is_file():
-        raise FileNotFoundError(f"SO-101 robot model not found: {ROBOT_PATH}")
-    model = mujoco.MjModel.from_xml_path(str(ROBOT_PATH))
-    validate_robot(model)
+    if scene == "robot":
+        if not ROBOT_PATH.is_file():
+            raise FileNotFoundError(f"SO-101 robot model not found: {ROBOT_PATH}")
+        model = mujoco.MjModel.from_xml_path(str(ROBOT_PATH))
+        validate_robot(model)
+        data = mujoco.MjData(model)
+        reset_robot(model, data)
+    elif scene == "basic_t0":
+        model, data = load_t0_scene()
+        robot_joint_names = tuple(
+            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, index)
+            for index in range(len(JOINT_NAMES))
+        )
+        if robot_joint_names != JOINT_NAMES:
+            raise RuntimeError(f"unexpected robot joint order: {robot_joint_names}")
+        key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
+        expected_home = home_qpos()
+        if (
+            key_id < 0
+            or not np.allclose(
+                model.key_qpos[key_id, :6], expected_home, rtol=0, atol=1e-9
+            )
+            or not np.allclose(
+                model.key_ctrl[key_id, :6], expected_home, rtol=0, atol=1e-9
+            )
+        ):
+            raise RuntimeError("T0 home differs from the formal real-home mapping")
+        reset_to_home_keyframe(model, data)
+    else:
+        raise ValueError(f"unknown mirror scene: {scene}")
 
     alignment_robot = load_alignment()["robot"]
     calibrated_ranges = tuple(
@@ -159,8 +192,7 @@ def load_calibrated_robot(
         raise RuntimeError("alignment physical ranges differ from follower calibration")
 
     JointAngleMapping().validate_mujoco_ranges(model)
-    data = mujoco.MjData(model)
-    reset_robot(model, data)
+    validate_mujoco_joint_refs(model)
     return model, data
 
 
@@ -211,8 +243,8 @@ def map_real_state(
             / (mapper.real_ranges[index, 1] - mapper.real_ranges[index, 0]),
             mujoco_deg=float(mapped_deg[index]),
             outside_calibration=bool(
-                value < mapper.real_ranges[index, 0]
-                or value > mapper.real_ranges[index, 1]
+                value < mapper.real_ranges[index, 0] - 1e-8
+                or value > mapper.real_ranges[index, 1] + 1e-8
             ),
         )
         for index, value in enumerate(values)
@@ -256,12 +288,15 @@ def apply_pose_deg(
             lower = max(lower, float(model.actuator_ctrlrange[joint_id, 0]))
             upper = min(upper, float(model.actuator_ctrlrange[joint_id, 1]))
         if lower > upper:
-            raise RuntimeError(f"inconsistent MuJoCo limits for {JOINT_NAMES[joint_id]}")
+            raise RuntimeError(
+                f"inconsistent MuJoCo limits for {JOINT_NAMES[joint_id]}"
+            )
         limited_value = min(max(value, lower), upper)
         data.qpos[model.jnt_qposadr[joint_id]] = limited_value
         data.ctrl[joint_id] = limited_value
         applied.append(math.degrees(limited_value))
-    data.qvel[:] = 0
+    for joint_id in range(len(JOINT_NAMES)):
+        data.qvel[model.jnt_dofadr[joint_id]] = 0
     mujoco.mj_forward(model, data)
     return tuple(applied)
 
@@ -358,6 +393,7 @@ def run_mirror(
     real_ranges: Sequence[tuple[float, float]],
     *,
     poll_hz: float,
+    scene: str = "robot",
 ) -> None:
     key_events: queue.SimpleQueue[int] = queue.SimpleQueue()
     signs = [1] * 5
@@ -375,12 +411,16 @@ def run_mirror(
         )
     )
     print_mapping_ranges(model, real_ranges, zero_deg)
+    if scene == "basic_t0":
+        print(
+            "[场景] basic_t0：方块保持 home 位置；Viewer 左侧 Camera 可切换 Free/overview。"
+        )
 
     with mujoco.viewer.launch_passive(
         model,
         data,
         key_callback=key_events.put,
-        show_left_ui=False,
+        show_left_ui=scene == "basic_t0",
         show_right_ui=False,
     ) as viewer:
         with viewer.lock():
@@ -452,6 +492,12 @@ def _positive_float(text: str) -> float:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--scene",
+        choices=SCENE_CHOICES,
+        default="robot",
+        help="mirror in the standalone robot (default) or formal basic_t0 scene",
+    )
+    parser.add_argument(
         "--port", help="override the configured SO-101 follower serial port"
     )
     parser.add_argument("--poll-hz", type=_positive_float, default=20.0)
@@ -472,8 +518,7 @@ def main() -> None:
     if recording["follower"]["id"] != ROBOT_ID:
         raise ValueError("recording configuration uses a different follower ID")
     port = args.port or recording["follower"]["port"]
-    model, data = load_calibrated_robot(real_ranges)
-    validate_mujoco_joint_refs(model)
+    model, data = load_calibrated_robot(real_ranges, scene=args.scene)
 
     try:
         from lerobot.robots.so_follower import SO101Follower, SO101FollowerConfig
@@ -500,6 +545,7 @@ def main() -> None:
                 zero_deg,
                 real_ranges,
                 poll_hz=args.poll_hz,
+                scene=args.scene,
             )
     except KeyboardInterrupt:
         print("\n[结束] 已停止镜像。")
